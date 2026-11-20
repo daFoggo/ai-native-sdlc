@@ -63,6 +63,19 @@ Open work after the first pilot (2026-11-20, wattprint-web). Most important firs
 - [x] Writes that bypass the file tools: a subagent or MCP tool now gets the after-tool check (0.3.2). Left: Codex's
       hosted tools skip hooks by design, and edits made outside the agent (an editor) are seen only by Stop verify.
 
+## Debt from the independent review (R1, 0.3.2 → 0.4.0)
+
+Must and Should findings were fixed in 0.4.0. Minor ones, kept here:
+- [ ] Claude's after-edit `check` matcher leaves out `NotebookEdit` (guarded, not checked).
+- [ ] A rule card with CRLF line endings loses its `paths:` and binds every file (`rulePaths` splits on `\n`).
+- [ ] The Stop `blocks` counter resets only on a green run, so after three early failures later tasks only warn.
+- [ ] Gemini hooks hardcode `~/.gemini/extensions/sdlc/` and have no captured payloads.
+- [ ] The role table names hallmark for `ui-new` "never on an existing design system", yet the pilot repo has one:
+      say instead that the repo's design docs win and hallmark only fills what they leave open.
+- [ ] ponytail switches itself on through its own hook whatever `providers.style` says: document it as the one
+      provider that is not swappable per repo.
+- [ ] Unit tests still leave `sdlc-state-*`/`sdlc-none-*` temp folders.
+
 ## Rollout
 
 - [ ] Onboard wattprint-text2sql-mcp, then wattprint-backend once its developer agrees, with `sdlc-init`.

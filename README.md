@@ -78,36 +78,18 @@ scanning (keys and tokens written into tracked files) is on unless `"secrets": f
 
 ## Evals
 
-`claude plugin eval . --scaffold --allow-tools Edit Write Agent` runs the suite in `evals/` (Sonnet, 3 runs per arm,
-2026-11-20, about $9 in total; f–i with `--ablation none`). The eval sandbox makes the workspace read-only to Bash, so
-shell edits are tested by `evals/manual/bash-edit.sh` (`claude -p` in throwaway repos, with and without the plugin):
+Latest numbers are in [evals/RESULTS.md](evals/RESULTS.md) (raw runs stay local in `evals/results/`). In short, on
+0.3.2 (2026-11-20, Sonnet main model, about $8 for the Claude suite):
 
-| Case | With plugin | Without | What it shows |
-|---|---|---|---|
-| `b3-docs-missed`: rules only in `docs/`, task says "look exactly like" a vendored component with pixel values | 1.00 | 0.33 | Without hooks the agent copied `text-[14px]` and `font-semibold` 3/3 times; with them, 0/3 |
-| `b2-copy-vendored`: same task, the prompt points at `docs/` | 1.00 | 1.00 | On a short, focused task the model reads the docs by itself; hooks are the floor for long sessions |
-| `b-standards`: the rule is in the system prompt next to the request | 1.00 | 1.00 | Same: an obvious, nearby rule is followed without help |
-| `e-reviewer`: a commit with two planted bugs and a harmless rename | 1.00 | n/a | The `reviewer` agent (Opus) caught both bugs 4/4 and never flagged the rename |
-| `a-trigger-*`: a feature, a copy change, a bug fix | 1.00 | n/a | The skill fires and picks lanes M, S, M; before the SessionStart pointer it did not fire |
-| `f-review-loop`: take the two-bug commit through the whole loop | 1.00 | n/a | 6/6 runs (with and without Bash): 2 reviewer rounds (cap 3), R2 scoped to R1's findings, both bugs fixed; $0.42–0.62 per run |
-| `g-fix-mode`: a correct test fails, tests are read-only | 1.00 | n/a | Test byte-identical, code fixed, tests run green 3/3 (with Bash) |
-| `h-parent-folder`: session in a folder of two repos, task asks for 13px bold | 1.00 | n/a | The skill fires from the parent and the child repo's check keeps the badge on the scale 3/3 |
-| `i-review-stuck`: the must-fix sits in a protected file | 1.00 | n/a | 3/3 stop after one review, leave the protected file alone, add no workaround, and hand the ruling to the user |
-| `manual/bash-edit.sh`: the user asks for a `sed` that breaks a rule | 3/3 | 0/3 | The `bash` hook reports the violation and the agent repairs it; without the plugin the broken class stays |
-
-Checks `claude plugin eval` cannot make (several plugins at once, or a subagent's context) are in
-`evals/manual/integrations.sh` (`claude -p`, Sonnet, throwaway repos; 2026-11-20):
-
-| Check | Result |
-|---|---|
-| `rules`: does a path-scoped rule reach a subagent that reads a matching file? | Yes: the subagent read only `src/cart.mjs` and quoted the rule card's id |
-| `superpowers`, lane M | Before 0.2.0 the agent skipped review 4/4 ("too small for a reviewer"); after, R1 ran 2/2. Superpowers skills stay out of lane M by design; cost $0.22–0.25 per run with the review |
-| `superpowers-L`, lane L on a `riskyPaths` file | `writing-plans` and `executing-plans` run, the `sdlc` reviewer reviews (no second review from superpowers). One run used all three rounds (R1 and R2 each found a Must in `isExpired`; R3 passed) and stopped there |
-| `hallmark`, a new page in a repo with its own design system | Hallmark runs with its sloplint, and the page keeps the repo's rules, with or without a root `DESIGN.md` (1 run each) |
-
-Cost: when nothing is broken the plugin adds the SessionStart pointer and the skill text (a few cents per task). When a
-check fails, the repair turns cost more: about $0.15 in `bash-edit` ($0.39 against $0.24), which is the price of the
-fix instead of a broken class. The review loop costs $0.4–0.6 on this small change, most of it the Opus reviewer.
+- **What the hooks add is model- and task-dependent.** On Claude Sonnet the docs-missed task (`b3-docs-missed`) now
+  passes 3/3 with or without the plugin; the 1.00 vs 0.33 gap measured on 0.1.0 did not reproduce. Where the model
+  does slip, the hooks catch it: Codex on the same task 3/3 with hooks vs 2/3 with hooks off, and a `sed` that breaks
+  a rule (`evals/manual/bash-edit.sh`) 3/3 repaired with the plugin vs 0/3 without.
+- **Process behavior holds:** the reviewer catches both planted bugs and never the harmless rename (3/3); the loop
+  uses two rounds and re-reviews only the findings (`f-review-loop` 2 of 3 runs full marks, one lost the final-report
+  grader); fix mode keeps the test byte-identical (3/3); a parent folder of repos still gets the skill and the
+  child's checks (3/3); a must-fix in a protected file stops the loop and hands the ruling over (3/3).
+- **Not yet measured:** real sessions on the pilot repo (repeat violations, rounds, cost per task).
 
 ## Development
 

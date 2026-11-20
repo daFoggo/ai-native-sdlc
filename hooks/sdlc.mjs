@@ -42,6 +42,11 @@ export function loadConfig(root) {
 
 const matches = (rel, globs) => [globs].flat().some((g) => matchesGlob(rel, g))
 
+/** The repo above `dir`, or, from a folder that holds several repos, each child repo with an sdlc.json. */
+const rootsFor = (dir) => (findRoot(dir) ? [findRoot(dir)] : verifyRoots(dir))
+export const stateFileFor = (session) => join(tmpdir(), `sdlc-${session}.json`)
+const readState = (f) => (existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : {})
+
 function env(config) {
   const extra = (config.pathPrepend ?? []).map((p) => p.replace(/^~(?=\/|$)/, homedir()))
   return { ...process.env, PATH: [...extra, process.env.PATH].join(":") }
@@ -125,6 +130,8 @@ const newContent = (ti) =>
   Object.entries(ti)
     .filter(([k]) => !PATH_KEYS.includes(k) && !OLD_TEXT(k))
     .map(([, v]) => (typeof v === "string" ? v : JSON.stringify(v, (k, x) => (OLD_TEXT(k) ? undefined : x))))
+    // A Codex patch carries removed lines too ("-..."): removing a leaked key must stay possible.
+    .map((v) => (v.includes("*** Begin Patch") ? v.split("\n").filter((l) => !l.startsWith("-")).join("\n") : v))
     .join("\n")
 
 // ---- guard -----------------------------------------------------------------------------------
@@ -134,8 +141,7 @@ export function guard(input) {
   const e = normalize(input)
   if (e.shell) {
     // From a multi-repo parent folder the command may `cd` into any child repo: apply all of theirs.
-    const roots = findRoot(e.cwd) ? [findRoot(e.cwd)] : verifyRoots(e.cwd)
-    const configs = roots.map(loadConfig)
+    const configs = rootsFor(e.cwd).map(loadConfig)
     const hit = (list) => list.find((b) => new RegExp(b.pattern).test(e.command))
     const ban = hit(configs.flatMap((c) => c.denyBash ?? []))
     if (ban) return { decision: "deny", reason: `Blocked by sdlc.json: ${ban.reason}` }
@@ -215,7 +221,7 @@ const bashMark = (e) => join(tmpdir(), `sdlc-bash-${e.session}-${e.toolUse}`)
 
 export function markBash(input) {
   const e = normalize(input)
-  if (findRoot(e.cwd) || verifyRoots(e.cwd).length) writeFileSync(bashMark(e), String(Date.now()))
+  if (rootsFor(e.cwd).length) writeFileSync(bashMark(e), String(Date.now()))
 }
 
 // Dirty files (tracked or untracked) under root modified at or after `since`.
@@ -239,9 +245,8 @@ export function changedSince(root, since) {
 
 export function bashCheck(input, since, { rules = false } = {}) {
   const e = normalize(input)
-  const roots = findRoot(e.cwd) ? [findRoot(e.cwd)] : verifyRoots(e.cwd)
   const msgs = []
-  for (const root of roots) {
+  for (const root of rootsFor(e.cwd)) {
     let files
     try {
       files = changedSince(root, since)
@@ -250,6 +255,10 @@ export function bashCheck(input, since, { rules = false } = {}) {
     }
     if (!files.length || files.length > MAX_BASH_FILES) continue
     const config = loadConfig(root)
+    for (const rel of files.map((f) => relative(root, f))) {
+      const p = (config.protect ?? []).find((x) => matches(rel, x.glob))
+      if (p) msgs.push(`${rel} is protected: ${p.reason}. This command changed it; restore it with \`git checkout -- ${rel}\`.`)
+    }
     if (existsSync(fixFlag(root))) {
       const tests = files.map((f) => relative(root, f)).filter((r) => matches(r, config.tests ?? []))
       if (tests.length)
@@ -265,13 +274,39 @@ export function bashCheck(input, since, { rules = false } = {}) {
 
 // ---- verify ----------------------------------------------------------------------------------
 
-function fingerprint(root) {
-  const git = (...a) =>
-    execFileSync("git", a, { cwd: root, encoding: "utf8", maxBuffer: 64 << 20, stdio: ["ignore", "pipe", "ignore"] })
-  const status = git("status", "--porcelain=v1", "-uall")
-  if (!status.trim()) return null // clean tree: nothing of ours to verify
-  const h = createHash("sha1").update(status).update(git("diff")).update(git("diff", "--cached")) // works before the first commit too
-  // Untracked files are only names in `git status`; hash their content too.
+const gitOut = (root, ...a) =>
+  execFileSync("git", a, { cwd: root, encoding: "utf8", maxBuffer: 64 << 20, stdio: ["ignore", "pipe", "ignore"] })
+const headOf = (root) => {
+  try {
+    return gitOut(root, "rev-parse", "HEAD").trim()
+  } catch {
+    return null // no commits yet
+  }
+}
+
+/** Paths that differ from `base`: uncommitted changes plus commits made since the session started. */
+function changedPaths(root, base, head) {
+  const paths = []
+  const entries = gitOut(root, "status", "--porcelain=v1", "-z", "-uall").split("\0")
+  for (let i = 0; i < entries.length; i++) {
+    if (entries[i].length < 4) continue
+    paths.push(entries[i].slice(3))
+    if (/[RC]/.test(entries[i][0])) i++
+  }
+  if (base && head && base !== head) paths.push(...gitOut(root, "diff", "--name-only", base, head).split("\n").filter(Boolean))
+  return paths
+}
+
+/** A hash of the work since `base`, or null when there is nothing to verify (no change, or only docs). */
+function fingerprint(root, base, config) {
+  const head = headOf(root)
+  const paths = changedPaths(root, base, head)
+  if (!paths.length) return null
+  const ignore = config.verifyIgnore ?? ["**/*.md", `${config.artifacts ?? "docs/work"}/**`]
+  if (paths.every((p) => matches(p, ignore))) return null // docs-only turn: the full verify waits for code
+  const status = gitOut(root, "status", "--porcelain=v1", "-uall")
+  const h = createHash("sha1").update(status).update(gitOut(root, "diff")).update(gitOut(root, "diff", "--cached"))
+  if (head !== base) h.update(String(head)) // committed work counts: a commit must not dodge verify
   for (const line of status.split("\n").filter((l) => l.startsWith("?? "))) {
     try {
       h.update(readFileSync(join(root, line.slice(3))))
@@ -290,29 +325,34 @@ export function verifyRoots(base) {
 }
 
 const projectDir = (input) =>
-  process.env.CLAUDE_PROJECT_DIR ?? process.env.GEMINI_PROJECT_DIR ?? normalize(input).cwd
+  process.env.CLAUDE_PROJECT_DIR || process.env.GEMINI_PROJECT_DIR || normalize(input).cwd
 
-export function verify(input, stateFile) {
-  const state = existsSync(stateFile) ? JSON.parse(readFileSync(stateFile, "utf8")) : {}
+export function verify(input, stateFile = stateFileFor(normalize(input).session)) {
+  const state = readState(stateFile)
   const block = []
   const warn = []
-  for (const root of verifyRoots(projectDir(input))) {
+  for (const root of rootsFor(projectDir(input))) {
     const config = loadConfig(root)
     if (!config.verify) continue
+    const s = (state[root] ??= { blocks: 0, base: headOf(root) })
     let fp
     try {
-      fp = fingerprint(root)
+      fp = fingerprint(root, s.base, config)
     } catch {
       continue // not a git repo
     }
-    const s = (state[root] ??= { blocks: 0 })
-    if (!fp || fp === s.green || fp === s.failed) continue
+    if (!fp || fp === s.green) continue
+    if (fp === s.failed) {
+      warn.push(`verify still fails in ${root} on the same tree it failed on before (\`${config.verify}\`). Fix it, or tell the user why it is left failing.`)
+      continue
+    }
     const r = run(config.verify, root, config, config.verifyTimeout ?? 540)
     if (r.ok) Object.assign(s, { green: fp, failed: null, blocks: 0 })
     else {
       Object.assign(s, { failed: fp, blocks: s.blocks + 1 })
       const msg = `verify failed in ${root}: \`${config.verify}\`\n${tail(r.out, 40)}`
-      ;(s.blocks <= MAX_BLOCKS ? block : warn).push(msg)
+      if (s.blocks <= MAX_BLOCKS) block.push(msg)
+      else warn.push(`verify still fails after ${MAX_BLOCKS} blocks; not blocking again.\n${msg}`)
     }
   }
   writeFileSync(stateFile, JSON.stringify(state))
@@ -321,10 +361,14 @@ export function verify(input, stateFile) {
 
 // ---- start -----------------------------------------------------------------------------------
 
-export function start(input) {
+export function start(input, stateFile = stateFileFor(normalize(input).session)) {
   const base = projectDir(input)
-  const roots = findRoot(base) ? [findRoot(base)] : verifyRoots(base)
+  const roots = rootsFor(base)
   if (!roots.length) return null
+  // Remember where each repo stood, so verify also sees work that gets committed during the session.
+  const state = readState(stateFile)
+  for (const r of roots) state[r] ??= { blocks: 0, base: headOf(r) }
+  writeFileSync(stateFile, JSON.stringify(state))
   const where = roots.map((r) => relative(base, r) || ".").join(", ")
   return `This workspace follows the sdlc process (sdlc.json in: ${where}). Before any code change, review or plan there, invoke the \`sdlc\` skill and state the lane (S, M or L) with its reason.`
 }
@@ -445,9 +489,9 @@ function main() {
   } else if (mode === "flush") {
     if (host.flush) emit(host.flush(session))
   } else if (mode === "verify") {
-    const { block, warn } = verify(input, join(tmpdir(), `sdlc-${normalize(input).session}.json`))
+    const { block, warn } = verify(input)
     if (block.length) emit(host.block(`Not done yet: the project's verify command fails. Fix it, then finish.\n\n${block.join("\n\n")}`))
-    if (warn.length) emit(host.warn(`sdlc: verify still fails after ${MAX_BLOCKS} tries; stopping anyway.\n${warn.join("\n\n")}`))
+    else if (warn.length) emit(host.warn(`sdlc: ${warn.join("\n\n")}`))
   }
   if (emit.count === said && host.empty) emit(host.empty) // hosts that want JSON on every call
 }
@@ -456,7 +500,12 @@ if (resolve(process.argv[1] ?? "") === fileURLToPath(import.meta.url)) {
   try {
     main()
   } catch (e) {
-    // A broken hook must never wedge the session; say why and let the tool run.
-    process.stderr.write(`sdlc hook error: ${e.message}\n`)
+    // A broken hook (say, a typo in sdlc.json) must never wedge the session: answer the host's neutral reply,
+    // and say so where the user sees it, since the check it should have made did not run.
+    const [mode, named] = process.argv.slice(2)
+    const msg = `sdlc hook error in ${mode}: ${e.message}. The check did not run; fix the cause (often sdlc.json).`
+    process.stderr.write(`${msg}\n`)
+    if (named === "antigravity") console.log(JSON.stringify(mode === "guard" ? { decision: "ask", reason: msg } : {}))
+    else console.log(JSON.stringify({ systemMessage: msg }))
   }
 }

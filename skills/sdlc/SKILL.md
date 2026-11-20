@@ -17,9 +17,10 @@ below), so a skill can be swapped by editing one line. It works the same on ever
 |---|---|---|
 | **S** | Copy, config, styling, a rename: no new logic | Do it → hooks check → done. No review. |
 | **M** | A feature or fix inside one area | Short spec and plan in chat → build → verify → review loop (R1 always) |
-| **L** | Several modules, a new subsystem, or any `riskyPaths` from sdlc.json (auth, money, migrations) | intent → spec → plan, each committed → build → verify → review loop |
+| **L** | Several modules, a new subsystem, or any `riskyPaths` from sdlc.json (auth, money, migrations) | intent → spec → plan, each saved and approved → build → verify → review loop |
 
 Say the lane in one line with the reason; the user can override. If the work grows, step up a lane and say so.
+Note the commit you start from (`git rev-parse HEAD`): it is the review's `<base>`.
 
 Size never skips review. A change with new logic (a branch, a computation, a parser, a data write) is lane M or L
 however short it is, and lanes M and L always get R1; "too small for a reviewer" means it was lane S, which holds
@@ -46,8 +47,9 @@ breached metric: write `intent.md` with `Source:` naming it and the evidence, th
 - Role `build` executes the plan; role `style` (if set) governs how code is written.
 - Tests: write the failing test first for new logic (a branch, parser, money, auth, data write) and for every bug
   fix. Copy, config and styling need none. This policy wins over any provider that says otherwise.
-- Bug fix: commit the failing test, then run `node <plugin root>/hooks/sdlc.mjs fix on` from the repo (the plugin root
-  is two folders above this skill's folder); tests are read-only until `fix off`. Fix the code, not the test.
+- Bug fix: write the failing test and see it fail for the expected reason, then run
+  `node <plugin root>/hooks/sdlc.mjs fix on` from the repo (the plugin root is two folders above this skill's
+  folder); tests are read-only until `fix off`. Fix the code, not the test.
 - The hooks run the project's check after every edit and its verify command when you stop; a failing check comes
   back to you. They also refuse an edit that writes a secret into a tracked file, and pause for the user on the
   paths and commands sdlc.json lists under `approve`; the reason says who approves. Never weaken a check, a lint rule or a test to get green; a real exception gets an inline waiver
@@ -60,13 +62,14 @@ The reviewer (role `review`) is always a fresh context on the most capable model
 On Claude Code it is the `sdlc:reviewer` agent. Elsewhere, start a fresh subagent whose instructions are
 [references/reviewer.md](references/reviewer.md), on the strongest model the host offers, told to change nothing;
 a host with no subagents gets the same file in a new session. Package the change first:
-`node <this skill dir>/scripts/review-package.mjs <base> [head]` prints a file with the diff and the bound rules.
+`node <this skill dir>/scripts/review-package.mjs <base>` prints a file with everything since `<base>` (committed or
+not, new files included) and the rule cards that bind it.
 
 1. **R1, full.** Dispatch the reviewer with the package path, the spec and plan paths, `mode: full`.
 2. Sort the findings yourself: **Must fix** and **Should fix** enter ONE fix pass, all together; each fix gets a
    test that failed first. **Minor** goes to the debt list, never into the loop. A finding you reject is a
    ruling: `Ruling: <finding> — <why> — <cost if wrong>`.
-3. **R2, scoped.** New package from the commit R1 saw to HEAD; dispatch with `mode: scoped` and the open findings.
+3. **R2, scoped.** A new package from the same `<base>`; dispatch with `mode: scoped` and the open findings only.
 4. Still open after R2: one more fix pass, then **R3, scoped**, the last one.
 5. Anything open after R3 stops the loop: hand it to the user with your rulings. A fourth round does not
    converge; the problem is in the plan or the spec.
@@ -110,7 +113,7 @@ skill is not installed, do the role inline with the template and say so in one l
 | intent | `superpowers:brainstorming` | ask until the template's fields are concrete |
 | spec | `superpowers:brainstorming` (its design doc, saved as `spec.md`) | fill `templates/spec.md` |
 | plan | `superpowers:writing-plans` (saved as `plan.md`) | plan mode, saved with `templates/plan.md` |
-| build | `superpowers:executing-plans` | work the plan task by task |
+| build | inline | work the plan task by task |
 | style | `ponytail:ponytail` | the repo's CLAUDE.md or AGENTS.md |
 | review | the reviewer (section 3) | same |
 | ui-new | `hallmark` (new pages only; never on an existing design system) | the repo's design docs |
@@ -118,4 +121,7 @@ skill is not installed, do the role inline with the template and say so in one l
 
 A provider's own artifact paths and loop limits yield to this skill: artifacts go where section 1 says, and its
 review rounds count toward the three above (in superpowers' subagent-driven mode, set its per-task fix rounds to
-one and keep only the final review here).
+one and keep only the final review here). Build defaults to inline because `superpowers:executing-plans` ends with
+its own review, a commit and a workspace cleanup; a repo that sets it as `build` skips that final section, since
+section 3 is the review. Committing stays the user's call: the artifacts and tests go into the change's commits
+when the user asks for them.

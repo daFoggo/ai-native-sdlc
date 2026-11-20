@@ -1,17 +1,21 @@
 import assert from "node:assert/strict"
 import { execFileSync, spawnSync } from "node:child_process"
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { test } from "node:test"
+import { after, test } from "node:test"
 import { fileURLToPath } from "node:url"
 
 import { HOSTS, check, findSecret, guard, hostOf, normalize, start, verify } from "./sdlc.mjs"
 
 const SCRIPT = fileURLToPath(new URL("./sdlc.mjs", import.meta.url))
 
-function repo(config, dir = ".claude") {
-  const root = mkdtempSync(join(tmpdir(), "sdlc-test-"))
+// Every repo of this run lives under one folder, removed at the end, so parent-folder tests see only their own.
+const BASE = mkdtempSync(join(tmpdir(), "sdlc-suite-"))
+after(() => rmSync(BASE, { recursive: true, force: true }))
+
+function repo(config, dir = ".claude", parent = BASE) {
+  const root = mkdtempSync(join(parent, "repo-"))
   mkdirSync(join(root, dir))
   writeFileSync(join(root, dir, "sdlc.json"), JSON.stringify(config))
   execFileSync("git", ["init", "-q"], { cwd: root })
@@ -36,7 +40,8 @@ test("guard does nothing outside an opted-in repo", () => {
 })
 
 test("guard bans shell commands, also from a parent folder of several repos", () => {
-  const root = repo({ denyBash: [{ pattern: "shadcn(@\\S+)? add https://hairlineui", reason: "use pnpm hairline" }] })
+  const root = repo({}, ".claude", mkdtempSync(join(BASE, "parent-")))
+  writeFileSync(join(root, ".claude", "sdlc.json"), JSON.stringify({ denyBash: [{ pattern: "shadcn(@\\S+)? add https://hairlineui", reason: "use pnpm hairline" }] }))
   const bash = (cwd) => reason(guard({ tool_name: "Bash", tool_input: { command: "cd x && pnpm dlx shadcn@latest add https://hairlineui.com/r/a" }, cwd }))
   assert.match(bash(root), /use pnpm hairline/)
   assert.match(bash(join(root, "..")), /use pnpm hairline/)
@@ -251,4 +256,76 @@ test("a subagent or MCP tool that writes files gets the same check as the shell"
   run(mcp, "guard")
   writeFileSync(join(root, "b.ts"), "bad")
   assert.match(run(mcp, "bash"), /check failed on b\.ts/)
+})
+
+// ---- R1 review findings (each test failed before its fix) ----------------------------------
+
+const gitc = (root, ...a) => execFileSync("git", ["-c", "user.email=e@x", "-c", "user.name=e", ...a], { cwd: root })
+const stateFile = () => join(mkdtempSync(join(tmpdir(), "sdlc-state-")), "s.json")
+
+test("R1-2a: committing the change does not dodge verify (base recorded at session start)", () => {
+  const root = repo({ verify: "test ! -f broken" })
+  gitc(root, "add", "-A"); gitc(root, "commit", "-qm", "init")
+  const state = stateFile()
+  start({ cwd: root }, state)
+  writeFileSync(join(root, "broken"), "1")
+  gitc(root, "add", "-A"); gitc(root, "commit", "-qm", "break it") // clean tree, new HEAD
+  assert.equal(verify({ cwd: root }, state).block.length, 1)
+})
+
+test("R1-2b: a session started in a subfolder still verifies its repo", () => {
+  const root = repo({ verify: "test ! -f broken" })
+  mkdirSync(join(root, "apps", "web"), { recursive: true })
+  writeFileSync(join(root, "broken"), "1")
+  assert.equal(verify({ cwd: join(root, "apps", "web") }, stateFile()).block.length, 1)
+})
+
+test("R1-2c: stopping again on the same failing tree warns instead of passing silently", () => {
+  const root = repo({ verify: "test ! -f broken" })
+  writeFileSync(join(root, "broken"), "1")
+  const state = stateFile()
+  assert.equal(verify({ cwd: root }, state).block.length, 1)
+  const again = verify({ cwd: root }, state)
+  assert.equal(again.block.length, 0)
+  assert.match(again.warn.join(), /still fails/)
+})
+
+test("R1-7: a turn that only changed docs or artifacts skips the full verify", () => {
+  const root = repo({ verify: "exit 1", artifacts: "docs/work" })
+  gitc(root, "add", "-A"); gitc(root, "commit", "-qm", "init")
+  mkdirSync(join(root, "docs", "work", "x"), { recursive: true })
+  writeFileSync(join(root, "docs/work/x/intent.md"), "i")
+  writeFileSync(join(root, "README.md"), "r")
+  assert.deepEqual(verify({ cwd: root }, stateFile()), { block: [], warn: [] })
+  writeFileSync(join(root, "a.ts"), "1")
+  assert.equal(verify({ cwd: root }, stateFile()).block.length, 1)
+})
+
+test("R1-3: a protected file changed through the shell is reported", () => {
+  const root = repo({ protect: [{ glob: "vendor/**", reason: "vendored" }] })
+  mkdirSync(join(root, "vendor"))
+  const call = { session_id: `p${process.pid}${Date.now()}`, tool_use_id: "b1", tool_name: "Bash", tool_input: { command: "sed -i s/a/b/ vendor/x.ts" }, cwd: root }
+  const run = (mode) => spawnSync("node", [SCRIPT, mode], { input: JSON.stringify(call), encoding: "utf8" }).stdout
+  run("guard")
+  writeFileSync(join(root, "vendor/x.ts"), "b")
+  assert.match(run("bash"), /vendor\/x\.ts is protected: vendored/)
+})
+
+test("R1-4: a broken config never wedges Antigravity and is visible on Claude", () => {
+  const root = repo({ protect: [{ glob: "v/**", reason: "vendored" }] })
+  writeFileSync(join(root, ".claude", "sdlc.local.json"), "{ broken,")
+  const call = (host, payload) => spawnSync("node", [SCRIPT, "guard", ...(host ? [host] : [])], { input: JSON.stringify(payload), encoding: "utf8" })
+  const ag = call("antigravity", { conversationId: "e", workspacePaths: [root], toolCall: { name: "write_file", args: { Path: join(root, "a.ts"), Content: "x" } } })
+  assert.equal(JSON.parse(ag.stdout).decision, "ask")
+  const cl = call(null, edit(root, "v/a.ts"))
+  assert.match(JSON.parse(cl.stdout).systemMessage, /sdlc hook error/)
+})
+
+test("R1-6: a Codex patch that removes a leaked secret is allowed", () => {
+  const root = repo({})
+  const key = "AKIA" + "ABCDEFGHIJKLMNOP"
+  const patch = `*** Begin Patch\n*** Update File: a.ts\n@@\n-const k = "${key}"\n+const k = process.env.K\n*** End Patch`
+  assert.equal(guard({ tool_name: "apply_patch", tool_input: { command: patch }, cwd: root, turn_id: "t" }), null)
+  const add = patch.replace(`-const k = "${key}"\n+const k = process.env.K`, `+const k = "${key}"`)
+  assert.match(reason(guard({ tool_name: "apply_patch", tool_input: { command: add }, cwd: root, turn_id: "t" })), /AWS access key/)
 })

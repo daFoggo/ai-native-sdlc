@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // Writes one file a reviewer reads instead of running git itself: the commits, the stat, the diff with context,
 // and the project rule cards whose `paths:` match a changed file, so a reviewer on any agent host gets them.
-//   node review-package.mjs <base> [head]     run inside the repo; prints the file path
+//   node review-package.mjs <base> [head]     run inside the repo; prints the file path. Without head: base to
+//                                             the working tree, uncommitted and untracked files included
 
-import { execFileSync } from "node:child_process"
+import { execFileSync, spawnSync } from "node:child_process"
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join, matchesGlob } from "node:path"
@@ -36,23 +37,29 @@ export function matchingRules(root, files) {
 }
 
 function main() {
-  const [base, head = "HEAD"] = process.argv.slice(2)
+  // With a head: that commit range. Without: everything since base, committed or not, untracked files included,
+  // because the sdlc loop reviews work before the user has asked for a commit.
+  const [base, head] = process.argv.slice(2)
   if (!base) throw new Error("usage: review-package.mjs <base> [head]")
   const git = (...a) => execFileSync("git", a, { encoding: "utf8", maxBuffer: 256 << 20 })
   const root = git("rev-parse", "--show-toplevel").trim()
-  const range = `${base}..${head}`
-  const files = git("diff", "--name-only", range).split("\n").filter(Boolean)
+  const range = head ? `${base}..${head}` : base
+  const untracked = head ? [] : git("ls-files", "--others", "--exclude-standard").split("\n").filter(Boolean)
+  // `git diff --no-index` exits 1 when files differ, which is the point here.
+  const newFileDiff = (f) => spawnSync("git", ["diff", "--no-index", "-U10", "/dev/null", f], { cwd: root, encoding: "utf8" }).stdout
+  const files = [...git("diff", "--name-only", range).split("\n").filter(Boolean), ...untracked]
   const rules = matchingRules(root, files)
   const review = existsSync(join(root, "REVIEW.md")) ? "REVIEW.md (read it first)" : "none (no REVIEW.md)"
   const parts = [
-    `# Review package ${range}`,
+    `# Review package ${head ? range : `${base}..working tree`}`,
     `Repo: ${root}\nReview policy: ${review}\nRules that bind these files: ${rules.map((r) => r.name).join(", ") || "none"}`,
-    `## Commits\n${git("log", "--oneline", range)}`,
-    `## Stat\n${git("diff", "--stat", range)}`,
+    `## Commits\n${git("log", "--oneline", `${base}..${head ?? "HEAD"}`) || "(none yet; the work is uncommitted)"}`,
+    `## Stat\n${git("diff", "--stat", range)}${untracked.map((f) => ` ${f} (new, untracked)`).join("\n")}`,
     ...rules.map((r) => `## Rule: ${r.name}\n${r.text}`),
-    `## Diff\n${git("diff", "-U10", range)}`,
+    `## Diff\n${git("diff", "-U10", range)}${untracked.map(newFileDiff).join("")}`,
   ]
-  const out = join(tmpdir(), `sdlc-review-${git("rev-parse", "--short", base).trim()}-${git("rev-parse", "--short", head).trim()}.md`)
+  const short = (r) => git("rev-parse", "--short", r).trim()
+  const out = join(tmpdir(), `sdlc-review-${short(base)}-${head ? short(head) : `wt${Date.now()}`}.md`)
   writeFileSync(out, parts.join("\n\n"))
   console.log(out)
 }
