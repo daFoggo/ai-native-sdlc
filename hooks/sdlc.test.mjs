@@ -362,3 +362,53 @@ test("R2-3: shell deletes, same-command commits and big commands still report pr
   assert.match(shell("echo b > vendor/x.ts && git -c user.email=e@x -c user.name=e commit -qam p"), /vendor\/x\.ts is protected/)
   assert.match(shell("for i in $(seq 30); do echo $i > f$i.txt; done; echo c > vendor/x.ts"), /vendor\/x\.ts is protected/)
 })
+
+// ---- R3 review leftovers --------------------------------------------------------------------
+
+test("R3-1: moving a protected file away with git mv is reported", () => {
+  const root = repo({ protect: [{ glob: "vendor/**", reason: "vendored" }] })
+  mkdirSync(join(root, "vendor"))
+  writeFileSync(join(root, "vendor/x.ts"), "a")
+  gitc(root, "add", "-A"); gitc(root, "commit", "-qm", "init")
+  const call = { session_id: `r31${process.pid}${Date.now()}`, tool_use_id: "m1", tool_name: "Bash", tool_input: { command: "git mv vendor/x.ts x.ts" }, cwd: root }
+  const run = (mode) => spawnSync("node", [SCRIPT, mode], { input: JSON.stringify(call), encoding: "utf8" }).stdout
+  run("guard")
+  gitc(root, "mv", "vendor/x.ts", "x.ts")
+  assert.match(run("bash"), /vendor\/x\.ts is protected/)
+  // and committed in the same command
+  gitc(root, "reset", "-q", "--hard")
+  call.tool_use_id = "m2"
+  run("guard")
+  gitc(root, "mv", "vendor/x.ts", "x.ts"); gitc(root, "commit", "-qm", "mv")
+  assert.match(run("bash"), /vendor\/x\.ts is protected/)
+})
+
+test("R3-2: commits brought in by merge, pull or checkout are not blamed on the command", () => {
+  const root = repo({ protect: [{ glob: "vendor/**", reason: "vendored" }] })
+  mkdirSync(join(root, "vendor"))
+  writeFileSync(join(root, "vendor/x.ts"), "a")
+  gitc(root, "add", "-A"); gitc(root, "commit", "-qm", "init")
+  const main = gitc(root, "rev-parse", "--abbrev-ref", "HEAD").toString().trim()
+  // someone else's work, written earlier, on another branch
+  const old = { ...process.env, GIT_AUTHOR_DATE: "2020-01-01T00:00:00Z", GIT_COMMITTER_DATE: "2020-01-01T00:00:00Z" }
+  const gitOld = (...a) => execFileSync("git", ["-c", "user.email=e@x", "-c", "user.name=e", ...a], { cwd: root, env: old })
+  gitOld("checkout", "-qb", "up")
+  writeFileSync(join(root, "vendor/x.ts"), "upstream")
+  gitOld("commit", "-qam", "vendor bump")
+  gitc(root, "checkout", "-q", main)
+  writeFileSync(join(root, "a.ts"), "1")
+  gitc(root, "add", "-A"); gitc(root, "commit", "-qm", "local")
+  let n = 0
+  const shell = (cmd) => {
+    const call = { session_id: `r32${process.pid}${Date.now()}`, tool_use_id: `c${n++}`, tool_name: "Bash", tool_input: { command: cmd }, cwd: root }
+    const run = (mode) => spawnSync("node", [SCRIPT, mode], { input: JSON.stringify(call), encoding: "utf8" }).stdout
+    run("guard")
+    execFileSync("bash", ["-c", cmd], { cwd: root })
+    return run("bash")
+  }
+  const git = "git -c user.email=e@x -c user.name=e"
+  assert.doesNotMatch(shell(`${git} checkout -q up`), /protected/) // switch branch
+  assert.doesNotMatch(shell(`${git} checkout -q ${main}`), /protected/)
+  assert.doesNotMatch(shell(`${git} merge -q --no-edit up`), /protected/) // merge commit made now
+  assert.match(shell(`echo mine > vendor/x.ts && ${git} commit -qam own`), /vendor\/x\.ts is protected/) // own commit still caught
+})

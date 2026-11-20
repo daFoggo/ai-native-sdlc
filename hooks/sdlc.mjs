@@ -236,7 +236,9 @@ export function changedSince(root, since) {
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i]
     if (e.length < 4) continue
-    if (/[RC]/.test(e[0])) i++ // rename/copy: the next entry is the old path
+    // Rename: the next entry is the old path, gone from where it was (git mv of a protected file).
+    if (e[0] === "R") deleted.push(join(root, entries[++i]))
+    else if (e[0] === "C") i++
     const abs = join(root, e.slice(3))
     if (e[0] === "D" || e[1] === "D") deleted.push(abs) // no mtime to compare: a deleted path is always reported
     else
@@ -257,13 +259,18 @@ export function bashCheck(input, mark, { rules = false } = {}) {
     } catch {
       continue // not a git repo
     }
-    // A command that also committed leaves a clean tree: take what its commits changed.
+    // A command that also committed leaves a clean tree: take what its own commits changed. Only commits on top of
+    // the old HEAD, made since the command started and not merges, so a checkout, pull or merge of others' work is not blamed.
     const before = mark.heads?.[root]
     const head = headOf(root)
-    const committed =
-      before && head && before !== head
-        ? gitOut(root, "diff", "--name-only", before, head).split("\n").filter(Boolean).map((f) => join(root, f))
-        : []
+    let committed = []
+    if (before && head && before !== head)
+      try {
+        gitOut(root, "merge-base", "--is-ancestor", before, head)
+        const since = `--since=@${Math.floor(mark.since / 1000) - 2}`
+        const log = gitOut(root, "log", "--no-merges", "--no-renames", "--name-only", "--format=", since, `${before}..${head}`)
+        committed = [...new Set(log.split("\n").filter(Boolean))].map((f) => join(root, f))
+      } catch {} // not an ancestor (branch switch, rebase) or `before` is gone: nothing to attribute
     const written = [...new Set([...changed.files, ...committed.filter((f) => existsSync(f))])]
     const touched = [...new Set([...written, ...changed.deleted, ...committed])]
     if (!touched.length) continue
