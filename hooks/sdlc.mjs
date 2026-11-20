@@ -5,7 +5,8 @@
 //                         shell commands; ask for approval on gated paths and commands
 //   check   after an edit run the project's fast check on the edited files; silent when it passes. Hosts without
 //                         path-scoped rules also get the matching rule cards the first time a file needs them
-//   bash    after a shell same check on files the command changed (guard marks when the command started)
+//   bash    after a shell, subagent or MCP tool: the same check on files it changed (guard marks the start),
+//                         so writes that bypass the file tools (sed, a subagent, an MCP server) are checked too
 //   verify  Stop          run the project's verify command when the tree changed since the last green run
 //   fix on|off            mark the repo as fixing a bug: tests become read-only until `fix off`
 // Usage: node sdlc.mjs <mode> [host]. Hosts: claude (also Codex, which speaks the same JSON), gemini, antigravity.
@@ -207,9 +208,9 @@ export function check(input, { rules = false } = {}) {
   return msgs.length ? msgs.join("\n\n") : null
 }
 
-// ---- bash: edits made through the shell (sed, heredocs, codemods) ---------------------------
+// ---- bash: files written outside the file tools (shell, subagents, MCP servers) -------------
 
-const MAX_BASH_FILES = 20 // a codegen or install that touches more is not an edit to lint file by file
+const MAX_BASH_FILES = 20 // a codegen, install or big subagent task touching more is left to verify
 const bashMark = (e) => join(tmpdir(), `sdlc-bash-${e.session}-${e.toolUse}`)
 
 export function markBash(input) {
@@ -428,7 +429,7 @@ function main() {
     if (g) emit(host.guard(g))
     else {
       if (host.pass) emit(host.pass)
-      if (normalize(input).shell) markBash(input)
+      if (!normalize(input).files.length) markBash(input) // any tool that is not a file edit may still write files
     }
   } else if (mode === "check") {
     const msg = check(input, { rules })

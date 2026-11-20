@@ -239,3 +239,16 @@ test("Antigravity (real payloads): guard reads toolCall, check failures reach th
   assert.equal(stop.decision, "continue")
   assert.match(stop.reason, /verify failed/)
 })
+
+test("a subagent or MCP tool that writes files gets the same check as the shell", () => {
+  const root = repo({ check: [{ glob: "**/*.ts", run: "! grep -q bad {file}" }] })
+  const run = (call, mode) => spawnSync("node", [SCRIPT, mode], { input: JSON.stringify(call), encoding: "utf8" }).stdout
+  const agent = { session_id: `s${process.pid}${Date.now()}`, tool_use_id: "a1", tool_name: "Agent", tool_input: { prompt: "write a.ts" }, cwd: root }
+  run(agent, "guard")
+  writeFileSync(join(root, "a.ts"), "bad") // what the subagent wrote
+  assert.match(JSON.parse(run(agent, "bash")).hookSpecificOutput.additionalContext, /check failed on a\.ts/)
+  const mcp = { ...agent, tool_use_id: "m1", tool_name: "mcp__fs__write_file", tool_input: { path: join(root, "b.ts"), content: "bad" } }
+  run(mcp, "guard")
+  writeFileSync(join(root, "b.ts"), "bad")
+  assert.match(run(mcp, "bash"), /check failed on b\.ts/)
+})

@@ -60,6 +60,9 @@ Open work after the first pilot (2026-11-20, wattprint-web). Most important firs
 - [ ] A verifier subagent that runs the app and checks behavior against `plan.md` before done.
 - [ ] Spec generation triggered by an accepted `intent.md` (a CI job on merge), and the managed-settings example.
 
+- [x] Writes that bypass the file tools: a subagent or MCP tool now gets the after-tool check (0.3.2). Left: Codex's
+      hosted tools skip hooks by design, and edits made outside the agent (an editor) are seen only by Stop verify.
+
 ## Rollout
 
 - [ ] Onboard wattprint-text2sql-mcp, then wattprint-backend once its developer agrees, with `sdlc-init`.
