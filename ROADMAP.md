@@ -13,10 +13,13 @@ Open work after the first pilot (2026-11-20, wattprint-web). Most important firs
 
 - [x] The full review loop (`f-review-loop`, 3/3, two rounds each): R1 finds two bugs, one fix pass, R2 scoped. Grade that R2 only judges the listed
       findings, that Minor findings never enter the loop, and that nothing runs past R3.
-- [x] Fix mode end to end (`g-fix-mode`; rerun once to confirm the reworded grader): commit a failing test, `fix on`, ask for the fix; grade the test file unchanged.
+- [x] Fix mode end to end (`g-fix-mode`, 3/3 with Bash): commit a failing test, `fix on`, ask for the fix; grade the test file unchanged.
 - [x] A parent folder of several repos (`h-parent-folder`, 3/3).
-- [ ] Runs with Bash granted (needs a sandbox backend, e.g. bubblewrap on Linux): the `bash` hook and the reviewer's git commands are untested inside evals.
-- [ ] A loop case where R2 still finds a Must, to see R3 run and then a stop with rulings handed to the user.
+- [x] Runs with Bash granted (bubblewrap + socat). The eval sandbox is read-only to Bash, so shell edits are covered by
+      `evals/manual/bash-edit.sh` (3/3 with the plugin, 0/3 without).
+- [x] Review cannot converge (`i-review-stuck`, 3/3): the agent stops after R1 and hands the ruling over.
+- [ ] A third round itself has never run in an eval: every loop converged at R2 or stopped at R1. Needs a fix that
+      plausibly regresses something R2 catches.
 - [ ] Five runs instead of three for `e-reviewer` and `b3-docs-missed`; an arm with Opus as the main model.
 - [ ] A reviewer case with a subtler defect (a race or a missing authorization check), since the two planted bugs
       contradict their own doc comments and are easy.

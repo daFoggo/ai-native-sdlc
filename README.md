@@ -64,7 +64,8 @@ In a folder that holds several repos, the Stop hook verifies each child repo tha
 ## Evals
 
 `claude plugin eval . --scaffold --allow-tools Edit Write Agent` runs the suite in `evals/` (Sonnet, 3 runs per arm,
-2026-11-20, about $4 in total; f, g, h with `--ablation none` and no Bash, which this machine cannot sandbox):
+2026-11-20, about $9 in total; f–i with `--ablation none`). The eval sandbox makes the workspace read-only to Bash, so
+shell edits are tested by `evals/manual/bash-edit.sh` (`claude -p` in throwaway repos, with and without the plugin):
 
 | Case | With plugin | Without | What it shows |
 |---|---|---|---|
@@ -73,11 +74,15 @@ In a folder that holds several repos, the Stop hook verifies each child repo tha
 | `b-standards`: the rule is in the system prompt next to the request | 1.00 | 1.00 | Same: an obvious, nearby rule is followed without help |
 | `e-reviewer`: a commit with two planted bugs and a harmless rename | 1.00 | n/a | The `reviewer` agent (Opus) caught both bugs 4/4 and never flagged the rename |
 | `a-trigger-*`: a feature, a copy change, a bug fix | 1.00 | n/a | The skill fires and picks lanes M, S, M; before the SessionStart pointer it did not fire |
-| `f-review-loop`: take the two-bug commit through the whole loop | 1.00 | n/a | 2 reviewer rounds every run (cap is 3), R2 scoped to R1's findings, both bugs fixed; $0.42 per run |
-| `g-fix-mode`: a correct test fails, tests are read-only | 0.67 | n/a | Test byte-identical and code fixed 3/3; the third grader asked for "tests pass" although the run had no shell; the agent said so instead of claiming it (grader since reworded) |
+| `f-review-loop`: take the two-bug commit through the whole loop | 1.00 | n/a | 6/6 runs (with and without Bash): 2 reviewer rounds (cap 3), R2 scoped to R1's findings, both bugs fixed; $0.42–0.62 per run |
+| `g-fix-mode`: a correct test fails, tests are read-only | 1.00 | n/a | Test byte-identical, code fixed, tests run green 3/3 (with Bash) |
 | `h-parent-folder`: session in a folder of two repos, task asks for 13px bold | 1.00 | n/a | The skill fires from the parent and the child repo's check keeps the badge on the scale 3/3 |
+| `i-review-stuck`: the must-fix sits in a protected file | 1.00 | n/a | 3/3 stop after one review, leave the protected file alone, add no workaround, and hand the ruling to the user |
+| `manual/bash-edit.sh`: the user asks for a `sed` that breaks a rule | 3/3 | 0/3 | The `bash` hook reports the violation and the agent repairs it; without the plugin the broken class stays |
 
-Cost: the plugin adds about $0.01–0.03 per task run (the pointer, the skill, and one fix turn when a check fails).
+Cost: when nothing is broken the plugin adds the SessionStart pointer and the skill text (a few cents per task). When a
+check fails, the repair turns cost more: about $0.15 in `bash-edit` ($0.39 against $0.24), which is the price of the
+fix instead of a broken class. The review loop costs $0.4–0.6 on this small change, most of it the Opus reviewer.
 
 ## Development
 
