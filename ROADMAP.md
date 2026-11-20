@@ -81,3 +81,13 @@ Must and Should findings were fixed in 0.4.0. Minor ones, kept here:
 - [ ] Onboard wattprint-text2sql-mcp, then wattprint-backend once its developer agrees, with `sdlc-init`.
 - [x] Installs come from the GitHub marketplace; wattprint-web declares it in `.claude/settings.json`.
 - [ ] Run the eval suite in CI when `skills/`, `agents/` or `hooks/` change (the playbook's continuous evals).
+
+## Deferred from the 0.4.3 review (Minor)
+
+- sdlc-init: the formatter `check` glob must cover the files the CI formatter checks (markdown too); verify skips
+  docs-only turns, so a README-only edit can pass locally and fail CI.
+- SKILL.md bug-fix input list lacks "or the code that produces it", which the reviewer accepts.
+- SKILL.md "a repo's own templates in that folder win" does not say where to look.
+- `templates/ci/pr-review.yml` and `templates/maintain/bands.yaml` still hardcode `docs/work`.
+- `start` says "sdlc.json unreadable" also when only `sdlc.local.json` is broken; guard, check and verify still let a
+  broken config throw (visible error, but for that repo only checked by hand).

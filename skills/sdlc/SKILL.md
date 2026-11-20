@@ -28,9 +28,10 @@ only changes with no new logic. Pick the lane before building; never downgrade i
 
 ## 1. Artifacts (lane L; lane M keeps spec and plan in chat)
 
-Under `docs/work/YYYY-MM-DD-<slug>/` (or `artifacts` in sdlc.json). Templates: [templates/](templates/). When the work
-has a record elsewhere (a ticket, an incident), each artifact names its ID on the `Record:` line and the record gets
-the artifact's commit, so neither system is orphaned. Intent can also start from an incident, a failed CI run or a
+In `<artifacts>/YYYY-MM-DD-<slug>/`, where `<artifacts>` is the folder sdlc.json names (`docs/work` only when it
+names none; the session-start line says which). Templates: [templates/](templates/); a repo's own templates in that
+folder win. When the work has a record elsewhere (a ticket, an incident), each artifact names its ID on the
+`Record:` line and the record gets the artifact's commit, so neither system is orphaned. Intent can also start from an incident, a failed CI run or a
 breached metric: write `intent.md` with `Source:` naming it and the evidence, then go through the same lanes.
 
 1. `intent.md`: the problem in the originator's words, the outcome, who and what it touches, constraints, open
@@ -47,7 +48,9 @@ breached metric: write `intent.md` with `Source:` naming it and the evidence, th
 - Role `build` executes the plan; role `style` (if set) governs how code is written.
 - Tests: write the failing test first for new logic (a branch, parser, money, auth, data write) and for every bug
   fix. Copy, config and styling need none. This policy wins over any provider that says otherwise.
-- Bug fix: write the failing test and see it fail for the expected reason, then run
+- Bug fix: first read the real input that triggers it (the request, the stored row, the log line, the screen) and
+  build the failing test from that exact shape, not from a shape you assumed; a test on invented data passes while
+  the bug stays. Write the failing test and see it fail for the expected reason, then run
   `node <plugin root>/hooks/sdlc.mjs fix on` from the repo (the plugin root is two folders above this skill's
   folder); tests are read-only until `fix off`. Fix the code, not the test.
 - The hooks run the project's check after every edit and its verify command when you stop; a failing check comes
@@ -76,12 +79,20 @@ not, new files included) and the rule cards that bind it.
 
 Skip none of the three steps you need, add none beyond them, and never review the whole diff again in R2 or R3.
 
+The cap is per change. New scope that arrives after the loop has ended (a feature or bug added to the request, not
+a fix for a finding) is a new change: pick its lane, and it gets its own R1 to R3 from a new `<base>`. Say so in
+one line. While the earlier change is uncommitted, ask the user to commit it first; otherwise the new `<base>`
+still holds it, and the new R1 reviews the closed change again. A fix for a finding, or for something its review missed, is never new scope and never restarts the count.
+
 ## 4. Done
 
 - The verify command passed on the final tree (the Stop hook runs it; read its result, do not assume).
 - UI changes were opened in the running app; say what you exercised.
 - Report: what changed, the review rounds used, every `Ruling:`, and the debt you added (`shortcut:` comments and
-  deferred Minors, appended to `docs/debt.md` or the file named by `debt` in sdlc.json).
+  deferred Minors, appended to the file named by `debt` in sdlc.json, `docs/debt.md` when it names none).
+- Work that carries record IDs (tickets, a bug list) ends with one line per ID: its status (fixed, deferred, not
+  reproduced), the commit or PR (or `uncommitted`), and how it was fixed. An ID with no line is not done. Hand the
+  lines to the user; update the tracker yourself only when the user asks.
 - A mistake corrected for the second time (by a review or by the user) goes into the repo's agent instructions
   (CLAUDE.md or AGENTS.md) in this change, so the next session starts with it. Say when a change made them stale.
 - Commit, push and merge only when the user asks. The agent never approves its own work: the PR review in CI

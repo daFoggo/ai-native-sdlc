@@ -120,6 +120,20 @@ test("start points Claude at the sdlc skill only in opted-in workspaces", () => 
   assert.equal(start({ cwd: mkdtempSync(join(tmpdir(), "sdlc-none-")) }), null)
 })
 
+test("start names where artifacts and debt go, from sdlc.json or the defaults", () => {
+  assert.match(start({ cwd: repo({}) }), /artifacts in docs\/work\/<date>-<slug>\/, debt in docs\/debt\.md/)
+  const own = start({ cwd: repo({ artifacts: "plans", debt: "TODO.md" }) })
+  assert.match(own, /artifacts in plans\/<date>-<slug>\/, debt in TODO\.md/)
+  // A parent of several repos: each gets its own paths, and one broken sdlc.json does not silence the rest.
+  const parent = mkdtempSync(join(tmpdir(), "sdlc-multi-"))
+  repo({ artifacts: "plans" }, ".claude", parent)
+  writeFileSync(join(repo({}, ".claude", parent), ".claude", "sdlc.json"), "{bad")
+  const m = start({ cwd: parent })
+  assert.match(m, /invoke the `sdlc` skill/)
+  assert.match(m, /artifacts in plans\//)
+  assert.match(m, /sdlc\.json unreadable/)
+})
+
 test("bash: files a shell command changed get the same check, and fix mode reports changed tests", () => {
   const root = repo({ check: [{ glob: "**/*.ts", run: "! grep -q bad {file}" }], tests: ["**/*.test.ts"] })
   writeFileSync(join(root, "old.ts"), "bad") // dirty before the command: not ours to report

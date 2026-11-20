@@ -398,8 +398,17 @@ export function start(input, stateFile = stateFileFor(normalize(input).session))
   const state = readState(stateFile)
   for (const r of roots) state[r] ??= { blocks: 0, base: headOf(r) }
   writeFileSync(stateFile, JSON.stringify(state))
-  const where = roots.map((r) => relative(base, r) || ".").join(", ")
-  return `This workspace follows the sdlc process (sdlc.json in: ${where}). Before any code change, review or plan there, invoke the \`sdlc\` skill and state the lane (S, M or L) with its reason.`
+  // The paths are said up front: agents fall back to the skill's defaults when the repo set its own.
+  const where = roots.map((r) => {
+    let c
+    try {
+      c = loadConfig(r)
+    } catch {
+      return `${relative(base, r) || "."} (sdlc.json unreadable: fix it)` // one bad repo must not drop the pointer for all
+    }
+    return `${relative(base, r) || "."} (artifacts in ${c.artifacts ?? "docs/work"}/<date>-<slug>/, debt in ${c.debt ?? "docs/debt.md"})`
+  })
+  return `This workspace follows the sdlc process (sdlc.json in: ${where.join(", ")}). Before any code change, review or plan there, invoke the \`sdlc\` skill and state the lane (S, M or L) with its reason.`
 }
 
 // ---- output: one adapter per host -------------------------------------------------------------

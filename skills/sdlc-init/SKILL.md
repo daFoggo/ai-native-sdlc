@@ -28,8 +28,15 @@ test config, and recent git history. Do not ask what the repo already answers.
    the rules agents miss, and the doc section to open. Never copy a whole doc.
 5. **`sdlc.json`** in `.claude/` (Claude-only teams) or `.agents/` (any host; it wins when both exist). Template:
    `../sdlc/templates/sdlc.json`.
-   - `verify`: one command, under a few minutes, that never disturbs running dev servers.
-   - `check`: per-file checks fast enough to run after every edit (a single-file lint is ~2 s).
+   - `verify`: one command, under a few minutes, that never disturbs running dev servers, and that runs every
+     fast step the repo's CI runs (read `.github/workflows/` or the CI config: lint, format check, types, i18n or
+     other repo scripts, tests). Prefer the script CI itself calls, so the two cannot drift. A CI step left out
+     (too slow, needs services) is named in CLAUDE.md or AGENTS.md as run by CI only. A failure the agent only
+     meets in CI is a missing step here.
+   - `artifacts` and `debt`: where this repo already keeps plans or specs and its debt or TODO list (look in docs/
+     and the history). Ask only when it has none, then use the defaults (`docs/work`, `docs/debt.md`).
+   - `check`: per-file checks fast enough to run after every edit (a single-file lint is ~2 s). A formatter's
+     check mode and a line-length rule belong here, so they fail on the edit rather than at the end.
    - `protect` for vendored or generated paths, `denyBash` for commands the docs forbid, `approve` for the paths and
      commands that need a named person (migrations, infra, production deploys), `tests` globs for fix mode,
      `riskyPaths` that force lane L. Secret scanning is on unless `"secrets": false`.
@@ -55,5 +62,5 @@ test config, and recent git history. Do not ask what the repo already answers.
    CI if it is not already there. Offer the playbook's other jobs from `../sdlc/templates/ci/`: `pr-review.yml`
    (review against REVIEW.md, @claude fixes), `agent-evals.yml` (real tasks as evals, run when agent config
    changes) and `build-triage.yml`. Closing the loop from production uses `../sdlc/templates/maintain/bands.yaml`.
-10. **Prove it.** Run `verify`. Trigger each hook once on each host in use: an edit that breaks a check, an edit to
+10. **Prove it.** Run `verify`, and list each CI step beside the part of `verify` that covers it. Trigger each hook once on each host in use: an edit that breaks a check, an edit to
    a protected path, a denied command. Report what fired, and what each host could not do.

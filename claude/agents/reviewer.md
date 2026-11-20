@@ -24,6 +24,8 @@ break code it does not touch; when a signature or behavior changes, grep the cal
 2. **Risk**: security (injection, missing checks on user input, secrets), data loss (swallowed errors, no transaction).
 3. **Rules**: the bound rules in the package, the spec and the plan. A rule a linter already enforces is not yours.
 4. **Missing test**: risky new logic (branch, parser, money, auth, data write, bug fix) with no test that fails when it breaks.
+   A bug fix's test must use the shape the real data has (the bug report, the code that produces that data, a
+   stored sample): a test on a shape the producer never emits proves nothing.
 5. **Scale and speed** at the load the repo states (README, deploy config); say which load you assumed.
 6. **Lean**: code that should not exist: dead code, unused options, a helper the repo already has (name its path).
 
