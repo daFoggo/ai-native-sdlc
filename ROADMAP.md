@@ -18,8 +18,7 @@ Open work after the first pilot (2026-11-20, wattprint-web). Most important firs
 - [x] Runs with Bash granted (bubblewrap + socat). The eval sandbox is read-only to Bash, so shell edits are covered by
       `evals/manual/bash-edit.sh` (3/3 with the plugin, 0/3 without).
 - [x] Review cannot converge (`i-review-stuck`, 3/3): the agent stops after R1 and hands the ruling over.
-- [ ] A third round itself has never run in an eval: every loop converged at R2 or stopped at R1. Needs a fix that
-      plausibly regresses something R2 catches.
+- [x] A third round ran (`integrations.sh superpowers-L`): R1 and R2 found Musts, R3 passed, the loop stopped.
 - [ ] Five runs instead of three for `e-reviewer` and `b3-docs-missed`; an arm with Opus as the main model.
 - [ ] A reviewer case with a subtler defect (a race or a missing authorization check), since the two planted bugs
       contradict their own doc comments and are easy.
@@ -30,15 +29,17 @@ Open work after the first pilot (2026-11-20, wattprint-web). Most important firs
       changed; more than 20 changed files are left to `verify`).
 - [x] Fix mode protected tests only from Edit/Write (0.1.1: a test changed through Bash is reported after the
       command, not prevented).
-- [ ] Path-scoped rules are not documented to load in subagents; `review-package` hands them to the reviewer, but
-      an implementer subagent (superpowers' subagent-driven mode) may not get them.
+- [x] Path-scoped rules load in subagents (`integrations.sh rules`).
 - [ ] Superpowers' subagent-driven mode allows five fix rounds per task; the cap of three is only an instruction in
       the `sdlc` skill. Test with superpowers installed, or prefer `executing-plans` in the provider table.
-- [ ] Providers are untested with superpowers and hallmark installed (only inline fallbacks and ponytail ran).
-- [ ] No plugin icon (`claude plugin validate` warns).
+- [x] Providers tested with superpowers 7.0.2 and hallmark 2.0.0 installed (`integrations.sh`). Found and fixed: lane M
+      skipped review as "too small", and installed providers were never invoked (0.2.0).
+- [ ] In `claude -p`, the reviewer runs in the background and the session ends before its findings arrive; interactive
+      sessions and `claude plugin eval` wait for it. Check whether headless use (CI) needs a foreground reviewer.
+- [x] Plugin icon.
 
 ## Rollout
 
 - [ ] Onboard wattprint-text2sql-mcp, then wattprint-backend once its developer agrees, with `sdlc-init`.
-- [ ] Switch installs from the local folder to the GitHub marketplace (`/plugin marketplace add daFoggo/ai-native-sdlc`).
+- [x] Installs come from the GitHub marketplace; wattprint-web declares it in `.claude/settings.json`.
 - [ ] Run the eval suite in CI when `skills/`, `agents/` or `hooks/` change (the playbook's continuous evals).

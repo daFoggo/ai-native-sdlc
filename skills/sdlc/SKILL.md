@@ -15,10 +15,14 @@ can be swapped by editing one line.
 | Lane | When | Path |
 |---|---|---|
 | **S** | Copy, config, styling, a rename: no new logic | Do it → hooks check → done. No review. |
-| **M** | A feature or fix inside one area | Short spec in chat → plan (plan mode) → build → verify → review loop |
+| **M** | A feature or fix inside one area | Short spec and plan in chat → build → verify → review loop (R1 always) |
 | **L** | Several modules, a new subsystem, or any `riskyPaths` from sdlc.json (auth, money, migrations) | intent → spec → plan, each committed → build → verify → review loop |
 
 Say the lane in one line with the reason; the user can override. If the work grows, step up a lane and say so.
+
+Size never skips review. A change with new logic (a branch, a computation, a parser, a data write) is lane M or L
+however short it is, and lanes M and L always get R1; "too small for a reviewer" means it was lane S, which holds
+only changes with no new logic. Pick the lane before building; never downgrade it afterwards to skip a step.
 
 ## 1. Artifacts (lane L; lane M keeps spec and plan in chat)
 
@@ -72,6 +76,15 @@ Skip none of the three steps you need, add none beyond them, and never review th
 
 ## Roles and default providers
 
+Lane M does intent, spec, plan and build inline (in chat); their providers run in lane L, where the artifacts are
+worth their cost. Review, style, debug and ui-new apply in every lane where they fit.
+
+When a role applies and its provider is installed, invoke that skill with the Skill tool before doing the role,
+and save what it produces in the artifact's place (its design doc becomes `spec.md`, its plan `plan.md`). The
+sdlc rules above still bind it: the lanes, the test policy, the review cap. A provider that asks the user
+questions one by one (brainstorming) is the one exception when the user said up front they will not answer:
+then write intent and spec inline and say so. The exception covers only that provider; plan and build still go
+through theirs (`writing-plans`, `executing-plans` ask nothing).
 Override any of these in `.claude/sdlc.json` → `"providers": { "<role>": "<skill or 'inline'>" }`. If the named
 skill is not installed, do the role inline with the template and say so in one line.
 

@@ -1,5 +1,16 @@
 {
   "name": "ai-native-sdlc",
-  "owner": { "name": "daFoggo" },
-  "plugins": [{ "name": "sdlc", "source": "./", "description": "AI-native SDLC process and enforcement hooks." }]
+  "owner": {
+    "name": "daFoggo"
+  },
+  "metadata": {
+    "description": "The AI-Native SDLC Playbook as a plugin: lanes, a capped review loop, and hooks that enforce each repo's own standards."
+  },
+  "plugins": [
+    {
+      "name": "sdlc",
+      "source": "./",
+      "description": "AI-native SDLC process and enforcement hooks."
+    }
+  ]
 }

@@ -80,6 +80,16 @@ shell edits are tested by `evals/manual/bash-edit.sh` (`claude -p` in throwaway 
 | `i-review-stuck`: the must-fix sits in a protected file | 1.00 | n/a | 3/3 stop after one review, leave the protected file alone, add no workaround, and hand the ruling to the user |
 | `manual/bash-edit.sh`: the user asks for a `sed` that breaks a rule | 3/3 | 0/3 | The `bash` hook reports the violation and the agent repairs it; without the plugin the broken class stays |
 
+Checks `claude plugin eval` cannot make (several plugins at once, or a subagent's context) are in
+`evals/manual/integrations.sh` (`claude -p`, Sonnet, throwaway repos; 2026-11-20):
+
+| Check | Result |
+|---|---|
+| `rules`: does a path-scoped rule reach a subagent that reads a matching file? | Yes: the subagent read only `src/cart.mjs` and quoted the rule card's id |
+| `superpowers`, lane M | Before 0.2.0 the agent skipped review 4/4 ("too small for a reviewer"); after, R1 ran 2/2. Superpowers skills stay out of lane M by design; cost $0.22–0.25 per run with the review |
+| `superpowers-L`, lane L on a `riskyPaths` file | `writing-plans` and `executing-plans` run, the `sdlc` reviewer reviews (no second review from superpowers). One run used all three rounds (R1 and R2 each found a Must in `isExpired`; R3 passed) and stopped there |
+| `hallmark`, a new page in a repo with its own design system | Hallmark runs with its sloplint, and the page keeps the repo's rules, with or without a root `DESIGN.md` (1 run each) |
+
 Cost: when nothing is broken the plugin adds the SessionStart pointer and the skill text (a few cents per task). When a
 check fails, the repair turns cost more: about $0.15 in `bash-edit` ($0.39 against $0.24), which is the price of the
 fix instead of a broken class. The review loop costs $0.4–0.6 on this small change, most of it the Opus reviewer.
