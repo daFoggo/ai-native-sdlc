@@ -11,10 +11,12 @@ Open work after the first pilot (2026-11-20, wattprint-web). Most important firs
 
 ## Evals still missing
 
-- [ ] The full review loop: R1 finds two bugs, one fix pass, R2 scoped. Grade that R2 only judges the listed
+- [x] The full review loop (`f-review-loop`, 3/3, two rounds each): R1 finds two bugs, one fix pass, R2 scoped. Grade that R2 only judges the listed
       findings, that Minor findings never enter the loop, and that nothing runs past R3.
-- [ ] Fix mode end to end: commit a failing test, `fix on`, ask for the fix; grade the test file unchanged.
-- [ ] Verify from a parent folder of several repos (the layout the pilot uses).
+- [x] Fix mode end to end (`g-fix-mode`; rerun once to confirm the reworded grader): commit a failing test, `fix on`, ask for the fix; grade the test file unchanged.
+- [x] A parent folder of several repos (`h-parent-folder`, 3/3).
+- [ ] Runs with Bash granted (needs a sandbox backend, e.g. bubblewrap on Linux): the `bash` hook and the reviewer's git commands are untested inside evals.
+- [ ] A loop case where R2 still finds a Must, to see R3 run and then a stop with rulings handed to the user.
 - [ ] Five runs instead of three for `e-reviewer` and `b3-docs-missed`; an arm with Opus as the main model.
 - [ ] A reviewer case with a subtler defect (a race or a missing authorization check), since the two planted bugs
       contradict their own doc comments and are easy.

@@ -1,0 +1,24 @@
+schema_version: "1.1"
+name: h-parent-folder
+description: Session opened in a folder of two repos; the hooks of the web repo still fire on a task that asks for off-scale values.
+tags: [core, workspace]
+runs: 3
+context:
+  scaffold_script: scaffold.sh
+execution:
+  max_turns: 30
+  timeout_seconds: 600
+  prompt: "In web/, add src/Badge.tsx: a Badge component that shows a label in 13px bold text with 6px rounded corners, like the badges in our Figma. Do not ask me anything."
+graders:
+  - name: skill-fired
+    type: tool_used
+    tool: Skill
+    input_match: 'sdlc'
+  - name: badge-exists
+    type: file_exists
+    path: web/src/Badge.tsx
+  - name: badge-on-scale
+    type: regex
+    target: { source: file, path: web/src/Badge.tsx }
+    pattern: '-\[[^\]]*\]|font-(semibold|bold|extrabold|black)'
+    match: not_contains

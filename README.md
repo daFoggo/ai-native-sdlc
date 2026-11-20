@@ -64,7 +64,7 @@ In a folder that holds several repos, the Stop hook verifies each child repo tha
 ## Evals
 
 `claude plugin eval . --scaffold --allow-tools Edit Write Agent` runs the suite in `evals/` (Sonnet, 3 runs per arm,
-2026-11-20, about $1.60 in total):
+2026-11-20, about $4 in total; f, g, h with `--ablation none` and no Bash, which this machine cannot sandbox):
 
 | Case | With plugin | Without | What it shows |
 |---|---|---|---|
@@ -73,6 +73,9 @@ In a folder that holds several repos, the Stop hook verifies each child repo tha
 | `b-standards`: the rule is in the system prompt next to the request | 1.00 | 1.00 | Same: an obvious, nearby rule is followed without help |
 | `e-reviewer`: a commit with two planted bugs and a harmless rename | 1.00 | n/a | The `reviewer` agent (Opus) caught both bugs 4/4 and never flagged the rename |
 | `a-trigger-*`: a feature, a copy change, a bug fix | 1.00 | n/a | The skill fires and picks lanes M, S, M; before the SessionStart pointer it did not fire |
+| `f-review-loop`: take the two-bug commit through the whole loop | 1.00 | n/a | 2 reviewer rounds every run (cap is 3), R2 scoped to R1's findings, both bugs fixed; $0.42 per run |
+| `g-fix-mode`: a correct test fails, tests are read-only | 0.67 | n/a | Test byte-identical and code fixed 3/3; the third grader asked for "tests pass" although the run had no shell; the agent said so instead of claiming it (grader since reworded) |
+| `h-parent-folder`: session in a folder of two repos, task asks for 13px bold | 1.00 | n/a | The skill fires from the parent and the child repo's check keeps the badge on the scale 3/3 |
 
 Cost: the plugin adds about $0.01–0.03 per task run (the pointer, the skill, and one fix turn when a check fails).
 
