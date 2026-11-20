@@ -1,0 +1,14 @@
+{
+  "verify": "<one command that exits non-zero on failure: lint, types, tests>",
+  "verifyTimeout": 540,
+  "check": [
+    { "glob": "src/**/*.{ts,tsx}", "cwd": ".", "run": "<fast per-file check, {file} is relative to cwd>" }
+  ],
+  "protect": [{ "glob": "<vendored or generated path>/**", "reason": "<why and the right way to change it>" }],
+  "denyBash": [{ "pattern": "<regex>", "reason": "<why and the right command>" }],
+  "tests": ["**/*.test.{ts,tsx}", "**/__tests__/**"],
+  "riskyPaths": ["<auth, money, migrations>"],
+  "artifacts": "docs/work",
+  "debt": "docs/debt.md",
+  "providers": {}
+}

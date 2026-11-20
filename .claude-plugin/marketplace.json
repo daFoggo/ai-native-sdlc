@@ -1,0 +1,5 @@
+{
+  "name": "ai-native-sdlc",
+  "owner": { "name": "daFoggo" },
+  "plugins": [{ "name": "sdlc", "source": "./", "description": "AI-native SDLC process and enforcement hooks." }]
+}
