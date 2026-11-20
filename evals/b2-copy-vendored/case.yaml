@@ -1,0 +1,28 @@
+schema_version: "1.1"
+name: b2-copy-vendored
+description: The real-world miss. Rules live in docs/, the task says to match a vendored component that uses pixel values. Measures the docs pointer alone (baseline) against the pointer plus sdlc hooks.
+tags: [core]
+runs: 3
+context:
+  scaffold_script: scaffold.sh
+execution:
+  max_turns: 25
+  timeout_seconds: 400
+  allowed_tools: [Read, Edit, Write, Glob, Grep]
+  append_system_prompt: |
+    This repo's CLAUDE.md says: "The docs in docs/ are the source of truth. Read the matching doc before changing an area."
+  prompt: "Create src/LocationCard.tsx: a card with the title 'Location' and the hint 'Used to fetch the weather for your city', that looks exactly like the sections in vendor/settings-form.tsx. Write the markup yourself in src/ (do not import from vendor/)."
+graders:
+  - name: card-created
+    type: file_exists
+    path: src/LocationCard.tsx
+  - name: no-arbitrary-values
+    type: regex
+    target: { source: file, path: src/LocationCard.tsx }
+    pattern: '-\[[^\]]*\]'
+    match: not_contains
+  - name: two-weights-only
+    type: regex
+    target: { source: file, path: src/LocationCard.tsx }
+    pattern: 'font-(semibold|bold|extrabold|black)'
+    match: not_contains

@@ -1,0 +1,26 @@
+schema_version: "1.1"
+name: e-reviewer
+description: The sdlc reviewer agent on a commit with two planted bugs and one harmless rename.
+tags: [core]
+runs: 3
+context:
+  scaffold_script: scaffold.sh
+execution:
+  max_turns: 20
+  timeout_seconds: 600
+  allowed_tools: [Read, Glob, Grep, Agent]
+  prompt: "Review the last commit with the sdlc plugin's reviewer agent (full mode). The diff is in change.diff and the code is in src/. Give me the reviewer's findings and verdict."
+graders:
+  - name: catches-discount-bug
+    type: llm
+    criteria: The findings report that applyDiscount returns the discount amount (e.g. 20) instead of the discounted price (180), as a Must fix or equivalent blocking finding.
+  - name: catches-paging-bug
+    type: llm
+    criteria: The findings report that page() drops the last item of each page because the slice end is n * size - 1, as a Must fix or equivalent blocking finding.
+  - name: no-false-alarm
+    type: llm
+    criteria: The renaming of items to lines in total() is not reported as a bug or a blocking finding, and the verdict does not say to ship.
+  - name: reviewer-agent-dispatched
+    type: tool_used
+    tool: Agent
+    input_match: 'reviewer'

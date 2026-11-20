@@ -6,7 +6,7 @@ import { join } from "node:path"
 import { test } from "node:test"
 import { fileURLToPath } from "node:url"
 
-import { check, guard, verify } from "./sdlc.mjs"
+import { check, guard, start, verify } from "./sdlc.mjs"
 
 const SCRIPT = fileURLToPath(new URL("./sdlc.mjs", import.meta.url))
 
@@ -103,4 +103,11 @@ test("hook output: guard denies through JSON, verify blocks with exit 2", () => 
   })
   assert.equal(v.status, 2)
   assert.match(v.stderr, /verify failed/)
+})
+
+test("start points Claude at the sdlc skill only in opted-in workspaces", () => {
+  const root = repo({})
+  assert.match(start({ cwd: root }), /invoke the `sdlc` skill/)
+  assert.match(start({ cwd: join(root, "..") }), /sdlc/) // a parent folder of repos
+  assert.equal(start({ cwd: mkdtempSync(join(tmpdir(), "sdlc-none-")) }), null)
 })

@@ -1,0 +1,20 @@
+schema_version: "1.1"
+name: a-trigger-bugfix
+description: Does the sdlc skill fire from its description, and pick the right lane?
+tags: [trigger]
+runs: 1
+context:
+  scaffold_script: scaffold.sh
+execution:
+  max_turns: 6
+  timeout_seconds: 240
+  allowed_tools: [Read, Glob, Grep, Skill]
+  prompt: "Card renders an empty heading when title is an empty string; it should render nothing in that case. Fix it. Before changing anything, tell me how you will go about it."
+graders:
+  - name: sdlc-skill-fired
+    type: tool_used
+    tool: Skill
+    input_match: '"skill"\s*:\s*"(?:[\w-]+:)?sdlc"'
+  - name: right-lane
+    type: llm
+    criteria: The reply names lane M (failing test first, then fix, then review) (or describes that lane's path) for this request.

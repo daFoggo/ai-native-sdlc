@@ -41,7 +41,7 @@ create it. Needs Node 22.5 or later (`path.matchesGlob`).
 | `skills/sdlc` | The process: lanes S/M/L, artifacts (`intent.md`, `spec.md`, `plan.md`), the review loop, the definition of done, the role → provider table |
 | `skills/sdlc-init` | Onboards a repo: inventory the docs' rules, measure violations, enforce what a machine can, write rule cards, `sdlc.json`, `REVIEW.md` |
 | `agents/reviewer.md` | Fresh-context reviewer on the most capable model; full and scoped modes; every finding needs a concrete failing case |
-| `hooks/sdlc.mjs` | `guard` (protected paths, banned commands, read-only tests in fix mode), `check` (per-file check after each edit), `verify` (on Stop) |
+| `hooks/sdlc.mjs` | `start` (points Claude at the skill in opted-in repos), `guard` (protected paths, banned commands, read-only tests in fix mode), `check` (per-file check after each edit), `verify` (on Stop) |
 | `skills/sdlc/scripts/review-package.mjs` | One file per review: commits, stat, the rule cards that bind the changed files, and the diff |
 
 ## `.claude/sdlc.json`
@@ -60,6 +60,21 @@ create it. Needs Node 22.5 or later (`path.matchesGlob`).
 
 `.claude/sdlc.local.json` (gitignored) overrides it per machine, for example `"pathPrepend": ["~/.local/node/bin"]`.
 In a folder that holds several repos, the Stop hook verifies each child repo that has its own `sdlc.json`.
+
+## Evals
+
+`claude plugin eval . --scaffold --allow-tools Edit Write Agent` runs the suite in `evals/` (Sonnet, 3 runs per arm,
+2026-11-20, about $1.60 in total):
+
+| Case | With plugin | Without | What it shows |
+|---|---|---|---|
+| `b3-docs-missed`: rules only in `docs/`, task says "look exactly like" a vendored component with pixel values | 1.00 | 0.33 | Without hooks the agent copied `text-[14px]` and `font-semibold` 3/3 times; with them, 0/3 |
+| `b2-copy-vendored`: same task, the prompt points at `docs/` | 1.00 | 1.00 | On a short, focused task the model reads the docs by itself; hooks are the floor for long sessions |
+| `b-standards`: the rule is in the system prompt next to the request | 1.00 | 1.00 | Same: an obvious, nearby rule is followed without help |
+| `e-reviewer`: a commit with two planted bugs and a harmless rename | 1.00 | n/a | The `reviewer` agent (Opus) caught both bugs 4/4 and never flagged the rename |
+| `a-trigger-*`: a feature, a copy change, a bug fix | 1.00 | n/a | The skill fires and picks lanes M, S, M; before the SessionStart pointer it did not fire |
+
+Cost: the plugin adds about $0.01–0.03 per task run (the pointer, the skill, and one fix turn when a check fails).
 
 ## Development
 

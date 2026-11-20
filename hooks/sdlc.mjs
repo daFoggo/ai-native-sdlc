@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // sdlc-core hooks. One script, one mode per hook event:
+//   start   SessionStart one line telling Claude this repo follows the sdlc skill (skills trigger unreliably alone)
 //   guard   PreToolUse   deny edits to protected paths, test edits in fix mode, banned shell commands
 //   check   PostToolUse  run the project's fast check on the edited file; silent when it passes
 //   verify  Stop         run the project's verify command when the tree changed since the last green run
@@ -153,6 +154,16 @@ export function verify(input, stateFile) {
   return { block, warn }
 }
 
+// ---- start ---------------------------------------------------------------------------------
+
+export function start(input) {
+  const base = process.env.CLAUDE_PROJECT_DIR ?? input.cwd ?? process.cwd()
+  const roots = findRoot(base) ? [findRoot(base)] : verifyRoots(base)
+  if (!roots.length) return null
+  const where = roots.map((r) => relative(base, r) || ".").join(", ")
+  return `This workspace follows the sdlc process (.claude/sdlc.json in: ${where}). Before any code change, review or plan there, invoke the \`sdlc\` skill and state the lane (S, M or L) with its reason.`
+}
+
 // ---- main -----------------------------------------------------------------------------------
 
 function main() {
@@ -169,7 +180,10 @@ function main() {
   try {
     input = JSON.parse(readFileSync(0, "utf8") || "{}")
   } catch {}
-  if (mode === "guard") {
+  if (mode === "start") {
+    const msg = start(input)
+    if (msg) console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: msg } }))
+  } else if (mode === "guard") {
     const reason = guard(input)
     if (reason)
       console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: reason } }))
