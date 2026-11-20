@@ -221,50 +221,65 @@ const bashMark = (e) => join(tmpdir(), `sdlc-bash-${e.session}-${e.toolUse}`)
 
 export function markBash(input) {
   const e = normalize(input)
-  if (rootsFor(e.cwd).length) writeFileSync(bashMark(e), String(Date.now()))
+  const roots = rootsFor(e.cwd)
+  if (roots.length) writeFileSync(bashMark(e), JSON.stringify({ since: Date.now(), heads: Object.fromEntries(roots.map((r) => [r, headOf(r)])) }))
 }
 
-// Dirty files (tracked or untracked) under root modified at or after `since`.
+// Dirty files (tracked or untracked) under root modified at or after `since`, and every deleted path.
 export function changedSince(root, since) {
   const out = execFileSync("git", ["status", "--porcelain=v1", "-z", "-uall"], {
     cwd: root, encoding: "utf8", maxBuffer: 64 << 20, stdio: ["ignore", "pipe", "ignore"],
   })
   const entries = out.split("\0")
   const files = []
+  const deleted = []
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i]
     if (e.length < 4) continue
     if (/[RC]/.test(e[0])) i++ // rename/copy: the next entry is the old path
     const abs = join(root, e.slice(3))
-    try {
-      if (statSync(abs).isFile() && statSync(abs).mtimeMs >= since) files.push(abs)
-    } catch {} // deleted
+    if (e[0] === "D" || e[1] === "D") deleted.push(abs) // no mtime to compare: a deleted path is always reported
+    else
+      try {
+        if (statSync(abs).isFile() && statSync(abs).mtimeMs >= since) files.push(abs)
+      } catch {}
   }
-  return files
+  return { files, deleted }
 }
 
-export function bashCheck(input, since, { rules = false } = {}) {
+export function bashCheck(input, mark, { rules = false } = {}) {
   const e = normalize(input)
   const msgs = []
   for (const root of rootsFor(e.cwd)) {
-    let files
+    let changed
     try {
-      files = changedSince(root, since)
+      changed = changedSince(root, mark.since - 1000) // mtime granularity on some filesystems is 1 s
     } catch {
       continue // not a git repo
     }
-    if (!files.length || files.length > MAX_BASH_FILES) continue
+    // A command that also committed leaves a clean tree: take what its commits changed.
+    const before = mark.heads?.[root]
+    const head = headOf(root)
+    const committed =
+      before && head && before !== head
+        ? gitOut(root, "diff", "--name-only", before, head).split("\n").filter(Boolean).map((f) => join(root, f))
+        : []
+    const written = [...new Set([...changed.files, ...committed.filter((f) => existsSync(f))])]
+    const touched = [...new Set([...written, ...changed.deleted, ...committed])]
+    if (!touched.length) continue
     const config = loadConfig(root)
-    for (const rel of files.map((f) => relative(root, f))) {
+    // Protect and fix mode look at every path; a guard cannot see inside a shell command, so this is after the fact.
+    for (const rel of touched.map((f) => relative(root, f))) {
       const p = (config.protect ?? []).find((x) => matches(rel, x.glob))
-      if (p) msgs.push(`${rel} is protected: ${p.reason}. This command changed it; restore it with \`git checkout -- ${rel}\`.`)
+      if (p) msgs.push(`${rel} is protected: ${p.reason}. This command changed or removed it; restore it with \`git checkout ${before ?? "HEAD"} -- ${rel}\`.`)
     }
     if (existsSync(fixFlag(root))) {
-      const tests = files.map((f) => relative(root, f)).filter((r) => matches(r, config.tests ?? []))
+      const tests = touched.map((f) => relative(root, f)).filter((r) => matches(r, config.tests ?? []))
       if (tests.length)
         msgs.push(`Fix mode: this command changed tests (${tests.join(", ")}). Restore them with \`git checkout -- <file>\` and fix the code instead, or ask the user if a test is wrong.`)
     }
-    for (const f of files) {
+    if (written.length > MAX_BASH_FILES) continue // linting this many is verify's job
+    for (const f of written) {
       const m = checkFile(f, { rules, session: e.session })
       if (m) msgs.push(m)
     }
@@ -343,7 +358,11 @@ export function verify(input, stateFile = stateFileFor(normalize(input).session)
     }
     if (!fp || fp === s.green) continue
     if (fp === s.failed) {
-      warn.push(`verify still fails in ${root} on the same tree it failed on before (\`${config.verify}\`). Fix it, or tell the user why it is left failing.`)
+      // Said once per failing tree, so a host that can only "continue" (Antigravity) does not loop.
+      if (s.warned !== fp) {
+        warn.push(`verify still fails in ${root} on the same tree it failed on before (\`${config.verify}\`). Fix it, or tell the user why it is left failing.`)
+        s.warned = fp
+      }
       continue
     }
     const r = run(config.verify, root, config, config.verifyTimeout ?? 540)
@@ -352,7 +371,10 @@ export function verify(input, stateFile = stateFileFor(normalize(input).session)
       Object.assign(s, { failed: fp, blocks: s.blocks + 1 })
       const msg = `verify failed in ${root}: \`${config.verify}\`\n${tail(r.out, 40)}`
       if (s.blocks <= MAX_BLOCKS) block.push(msg)
-      else warn.push(`verify still fails after ${MAX_BLOCKS} blocks; not blocking again.\n${msg}`)
+      else if (s.warned !== fp) {
+        warn.push(`verify still fails after ${MAX_BLOCKS} blocks; not blocking again.\n${msg}`)
+        s.warned = fp
+      }
     }
   }
   writeFileSync(stateFile, JSON.stringify(state))
@@ -427,7 +449,7 @@ export const HOSTS = {
       return { json: { injectSteps: [{ systemMessage: { systemMessage: m } }] } }
     },
     block: (m) => ({ json: { decision: "continue", reason: m } }),
-    warn: () => null,
+    warn: (m) => ({ json: { decision: "continue", reason: m } }), // Stop's only channel; verify says it once
   },
 }
 
@@ -481,9 +503,9 @@ function main() {
   } else if (mode === "bash") {
     const mark = bashMark(normalize(input))
     if (existsSync(mark)) {
-      const since = Number(readFileSync(mark, "utf8")) - 1000 // mtime granularity on some filesystems is 1 s
+      const m = JSON.parse(readFileSync(mark, "utf8"))
       rmSync(mark, { force: true })
-      const msg = bashCheck(input, since, { rules })
+      const msg = bashCheck(input, m, { rules })
       if (msg) emit(host.context(msg, session))
     }
   } else if (mode === "flush") {

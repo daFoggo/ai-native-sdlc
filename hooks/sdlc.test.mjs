@@ -329,3 +329,36 @@ test("R1-6: a Codex patch that removes a leaked secret is allowed", () => {
   const add = patch.replace(`-const k = "${key}"\n+const k = process.env.K`, `+const k = "${key}"`)
   assert.match(reason(guard({ tool_name: "apply_patch", tool_input: { command: add }, cwd: root, turn_id: "t" })), /AWS access key/)
 })
+
+// ---- R2 review findings ---------------------------------------------------------------------
+
+test("R2-2c: on Antigravity a repeated failing stop continues once with the reason, then lets go", () => {
+  const root = repo({ verify: "test ! -f broken" })
+  writeFileSync(join(root, "broken"), "1")
+  const stop = { conversationId: `r2c${process.pid}${Date.now()}`, workspacePaths: [root], terminationReason: "NO_TOOL_CALL" }
+  const run = () => JSON.parse(spawnSync("node", [SCRIPT, "verify", "antigravity"], { input: JSON.stringify(stop), encoding: "utf8" }).stdout)
+  assert.equal(run().decision, "continue") // first failure: block
+  const again = run()
+  assert.equal(again.decision, "continue") // same tree: said once more, not silently passed
+  assert.match(again.reason, /still fails/)
+  assert.deepEqual(run(), {}) // and only once
+})
+
+test("R2-3: shell deletes, same-command commits and big commands still report protected files", () => {
+  const root = repo({ protect: [{ glob: "vendor/**", reason: "vendored" }] })
+  mkdirSync(join(root, "vendor"))
+  writeFileSync(join(root, "vendor/x.ts"), "a")
+  gitc(root, "add", "-A"); gitc(root, "commit", "-qm", "init")
+  let n = 0
+  const shell = (cmd) => {
+    const call = { session_id: `r23${process.pid}${Date.now()}`, tool_use_id: `b${n++}`, tool_name: "Bash", tool_input: { command: cmd }, cwd: root }
+    const run = (mode) => spawnSync("node", [SCRIPT, mode], { input: JSON.stringify(call), encoding: "utf8" }).stdout
+    run("guard")
+    execFileSync("bash", ["-c", cmd], { cwd: root })
+    return run("bash")
+  }
+  assert.match(shell("rm vendor/x.ts"), /vendor\/x\.ts is protected/)
+  gitc(root, "checkout", "-q", "--", "vendor/x.ts")
+  assert.match(shell("echo b > vendor/x.ts && git -c user.email=e@x -c user.name=e commit -qam p"), /vendor\/x\.ts is protected/)
+  assert.match(shell("for i in $(seq 30); do echo $i > f$i.txt; done; echo c > vendor/x.ts"), /vendor\/x\.ts is protected/)
+})
