@@ -111,3 +111,27 @@ test("start points Claude at the sdlc skill only in opted-in workspaces", () => 
   assert.match(start({ cwd: join(root, "..") }), /sdlc/) // a parent folder of repos
   assert.equal(start({ cwd: mkdtempSync(join(tmpdir(), "sdlc-none-")) }), null)
 })
+
+test("bash: files a shell command changed get the same check, and fix mode reports changed tests", () => {
+  const root = repo({ check: [{ glob: "**/*.ts", run: "! grep -q bad {file}" }], tests: ["**/*.test.ts"] })
+  writeFileSync(join(root, "old.ts"), "bad") // dirty before the command: not ours to report
+  const hook = (mode, cmd) =>
+    spawnSync("node", [SCRIPT, mode], {
+      input: JSON.stringify({ session_id: `b${process.pid}`, tool_use_id: "t1", tool_name: "Bash", tool_input: { command: cmd }, cwd: root }),
+      encoding: "utf8",
+    }).stdout
+  const runBash = (cmd) => {
+    hook("guard", cmd)
+    execFileSync("bash", ["-c", cmd], { cwd: root })
+    return hook("bash", cmd)
+  }
+  // Touch old.ts back in time so only the command's own writes count.
+  execFileSync("touch", ["-d", "2020-01-01", join(root, "old.ts")])
+  assert.equal(runBash("echo good > a.ts"), "")
+  const out = JSON.parse(runBash("echo bad > 'b c.ts'")).hookSpecificOutput.additionalContext
+  assert.match(out, /check failed on b c\.ts/)
+  assert.doesNotMatch(out, /old\.ts/)
+  execFileSync("node", [SCRIPT, "fix", "on"], { cwd: root })
+  assert.match(runBash("echo ok > x.test.ts"), /Fix mode: this command changed tests \(x\.test\.ts\)/)
+  assert.equal(hook("bash", "true"), "") // no mark: nothing to do
+})

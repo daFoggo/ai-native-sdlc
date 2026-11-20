@@ -41,7 +41,7 @@ create it. Needs Node 22.5 or later (`path.matchesGlob`).
 | `skills/sdlc` | The process: lanes S/M/L, artifacts (`intent.md`, `spec.md`, `plan.md`), the review loop, the definition of done, the role → provider table |
 | `skills/sdlc-init` | Onboards a repo: inventory the docs' rules, measure violations, enforce what a machine can, write rule cards, `sdlc.json`, `REVIEW.md` |
 | `agents/reviewer.md` | Fresh-context reviewer on the most capable model; full and scoped modes; every finding needs a concrete failing case |
-| `hooks/sdlc.mjs` | `start` (points Claude at the skill in opted-in repos), `guard` (protected paths, banned commands, read-only tests in fix mode), `check` (per-file check after each edit), `verify` (on Stop) |
+| `hooks/sdlc.mjs` | `start` (points Claude at the skill in opted-in repos), `guard` (protected paths, banned commands, read-only tests in fix mode), `check` (per-file check after each edit), `bash` (the same check on files a shell command changed), `verify` (on Stop) |
 | `skills/sdlc/scripts/review-package.mjs` | One file per review: commits, stat, the rule cards that bind the changed files, and the diff |
 
 ## `.claude/sdlc.json`

@@ -3,6 +3,7 @@
 //   start   SessionStart one line telling Claude this repo follows the sdlc skill (skills trigger unreliably alone)
 //   guard   PreToolUse   deny edits to protected paths, test edits in fix mode, banned shell commands
 //   check   PostToolUse  run the project's fast check on the edited file; silent when it passes
+//   bash    PostToolUse  same check on files a shell command changed (guard marks when the command started)
 //   verify  Stop         run the project's verify command when the tree changed since the last green run
 //   fix on|off           mark the repo as fixing a bug: tests become read-only until `fix off`
 // A repo opts in with .claude/sdlc.json (machine-only overrides in .claude/sdlc.local.json).
@@ -10,7 +11,7 @@
 
 import { execFileSync, spawnSync } from "node:child_process"
 import { createHash } from "node:crypto"
-import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { homedir, tmpdir } from "node:os"
 import { dirname, isAbsolute, join, matchesGlob, relative, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -100,6 +101,61 @@ export function check(input) {
   return failures.length ? `Project check failed on ${rel}. Fix it before moving on:\n${failures.join("\n\n")}` : null
 }
 
+// ---- bash: edits made through the shell (sed, heredocs, codemods) ---------------------------
+
+const MAX_BASH_FILES = 20 // a codegen or install that touches more is not an edit to lint file by file
+const bashMark = (input) => join(tmpdir(), `sdlc-bash-${input.session_id ?? "nosession"}-${input.tool_use_id ?? "x"}`)
+
+export function markBash(input) {
+  const cwd = input.cwd ?? process.cwd()
+  if (findRoot(cwd) || verifyRoots(cwd).length) writeFileSync(bashMark(input), String(Date.now()))
+}
+
+// Dirty files (tracked or untracked) under root modified at or after `since`.
+export function changedSince(root, since) {
+  const out = execFileSync("git", ["status", "--porcelain=v1", "-z", "-uall"], {
+    cwd: root, encoding: "utf8", maxBuffer: 64 << 20, stdio: ["ignore", "pipe", "ignore"],
+  })
+  const entries = out.split("\0")
+  const files = []
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i]
+    if (e.length < 4) continue
+    if (/[RC]/.test(e[0])) i++ // rename/copy: the next entry is the old path
+    const abs = join(root, e.slice(3))
+    try {
+      if (statSync(abs).isFile() && statSync(abs).mtimeMs >= since) files.push(abs)
+    } catch {} // deleted
+  }
+  return files
+}
+
+export function bashCheck(input, since) {
+  const cwd = input.cwd ?? process.cwd()
+  const roots = findRoot(cwd) ? [findRoot(cwd)] : verifyRoots(cwd)
+  const msgs = []
+  for (const root of roots) {
+    let files
+    try {
+      files = changedSince(root, since)
+    } catch {
+      continue // not a git repo
+    }
+    if (!files.length || files.length > MAX_BASH_FILES) continue
+    const config = loadConfig(root)
+    if (existsSync(fixFlag(root))) {
+      const tests = files.map((f) => relative(root, f)).filter((r) => matches(r, config.tests ?? []))
+      if (tests.length)
+        msgs.push(`Fix mode: this command changed tests (${tests.join(", ")}). Restore them with \`git checkout -- <file>\` and fix the code instead, or ask the user if a test is wrong.`)
+    }
+    for (const f of files) {
+      const m = check({ tool_input: { file_path: f }, cwd: root })
+      if (m) msgs.push(m)
+    }
+  }
+  return msgs.length ? msgs.join("\n\n") : null
+}
+
 // ---- verify ---------------------------------------------------------------------------------
 
 function fingerprint(root) {
@@ -185,10 +241,18 @@ function main() {
     if (msg) console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: msg } }))
   } else if (mode === "guard") {
     const reason = guard(input)
+    if (!reason && input.tool_name === "Bash") markBash(input)
     if (reason)
       console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: reason } }))
   } else if (mode === "check") {
     const msg = check(input)
+    if (msg) console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: msg } }))
+  } else if (mode === "bash") {
+    const mark = bashMark(input)
+    if (!existsSync(mark)) return
+    const since = Number(readFileSync(mark, "utf8")) - 1000 // mtime granularity on some filesystems is 1 s
+    rmSync(mark, { force: true })
+    const msg = bashCheck(input, since)
     if (msg) console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: msg } }))
   } else if (mode === "verify") {
     const { block, warn } = verify(input, join(tmpdir(), `sdlc-${input.session_id ?? "nosession"}.json`))

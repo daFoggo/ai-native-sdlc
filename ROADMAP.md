@@ -21,9 +21,10 @@ Open work after the first pilot (2026-11-20, wattprint-web). Most important firs
 
 ## Known limits
 
-- [ ] Edits made through Bash (`sed`, heredocs) skip `guard` and `check`; only the Stop `verify` catches them.
-      Option: a PostToolUse hook on Bash that runs `check` on files whose mtime changed.
-- [ ] Fix mode protects tests only from Edit/Write, not from Bash.
+- [x] Edits made through Bash (`sed`, heredocs) skipped `check` (0.1.1: the `bash` hook checks files the command
+      changed; more than 20 changed files are left to `verify`).
+- [x] Fix mode protected tests only from Edit/Write (0.1.1: a test changed through Bash is reported after the
+      command, not prevented).
 - [ ] Path-scoped rules are not documented to load in subagents; `review-package` hands them to the reviewer, but
       an implementer subagent (superpowers' subagent-driven mode) may not get them.
 - [ ] Superpowers' subagent-driven mode allows five fix rounds per task; the cap of three is only an instruction in

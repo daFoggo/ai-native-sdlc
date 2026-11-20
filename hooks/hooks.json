@@ -16,6 +16,10 @@
       {
         "matcher": "Edit|Write|MultiEdit",
         "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/sdlc.mjs\" check", "timeout": 90, "statusMessage": "sdlc: checking the edited file..." }]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/sdlc.mjs\" bash", "timeout": 120 }]
       }
     ],
     "Stop": [
