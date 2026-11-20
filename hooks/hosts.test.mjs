@@ -21,7 +21,7 @@ test("the Claude reviewer agent is the shared reviewer prompt plus frontmatter",
 })
 
 test("hook files call sdlc.mjs with a real mode and host, and none sits where another host auto-loads it", () => {
-  const modes = ["start", "guard", "check", "bash", "verify"]
+  const modes = ["start", "guard", "check", "bash", "verify", "flush"]
   const files = { "hooks/claude-codex.json": "claude", "hooks/gemini.json": "gemini", "hooks.json": "antigravity" }
   for (const [file, host] of Object.entries(files)) {
     const cmds = JSON.stringify(json(file)).match(/sdlc\.mjs\\?"? [a-z]+(?: [a-z]+)?/g)

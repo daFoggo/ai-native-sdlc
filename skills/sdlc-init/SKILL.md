@@ -45,8 +45,9 @@ test config, and recent git history. Do not ask what the repo already answers.
      `.claude/settings.json` (`extraKnownMarketplaces` + `enabledPlugins`) so teammates get it too.
    - Codex: `codex plugin marketplace add daFoggo/ai-native-sdlc`, `codex plugin add sdlc@ai-native-sdlc`, then
      `/hooks` once to trust them. Codex Cloud and ChatGPT run skills but no hooks: there CI (step 9) is the gate.
-   - Antigravity: `agy plugin install https://github.com/daFoggo/ai-native-sdlc`. It cannot feed a failed check
-     back after an edit, so the Stop verify is its gate.
+   - Antigravity: `agy plugin install https://github.com/daFoggo/ai-native-sdlc`. The snap build runs hooks in its
+     own sandbox without your `node`: copy it to `~/snap/antigravity-cli/common/local/bin/node`, and keep repos out
+     of hidden folders (snap cannot read them).
    - Gemini CLI: `gemini extensions install https://github.com/daFoggo/ai-native-sdlc`, then merge the plugin's
      `hooks/gemini.json` into the repo's `.gemini/settings.json` (Gemini reads extension hooks only from a path the
      other hosts also auto-load, so they ship as this template).

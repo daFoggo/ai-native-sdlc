@@ -44,8 +44,10 @@ Open work after the first pilot (2026-11-20, wattprint-web). Most important firs
       Antigravity and Gemini CLI. Codex payloads captured from a real run (`hooks/fixtures/codex/`).
 - [ ] Codex end to end: install from GitHub, trust the hooks, run the `b3-docs-missed` task with and without.
       Known: `codex exec` needs `--trust` (project config) and `--dangerously-bypass-hook-trust` (unreviewed hooks).
-- [ ] Antigravity end to end (needs `agy` signed in): capture its payloads, confirm the tool names in `EDIT_TOOLS`,
-      the plugin root variable in `hooks.json`, and whether `PostInvocation` can carry check failures back.
+- [x] Antigravity end to end (`agy` 1.4.12): payloads captured (`hooks/fixtures/antigravity/`); tool events are
+      grouped and the others flat; `{}` or silence from PreToolUse denies, so guard answers `ask`; check failures
+      reach the model through PostInvocation. Found while testing: the eval scaffolds' verify (`check.sh -r src`)
+      always passed, so earlier evals never exercised the Stop gate (fixed in 0.3.1).
 - [ ] Gemini CLI end to end (not installed here): the hooks template and `${extensionPath}`-free paths.
 - [ ] Codex custom agent (`.codex/agents/reviewer.toml` with `model`) written by `sdlc-init`, if the generic
       subagent reviews worse than the Claude agent on `e-reviewer`.

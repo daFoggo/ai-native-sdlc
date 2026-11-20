@@ -2,36 +2,57 @@
   "sdlc": {
     "SessionStart": [
       {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${PLUGIN_ROOT:-$HOME/.gemini/config/plugins/sdlc}/hooks/sdlc.mjs\" start antigravity",
-            "timeout": 10
-          }
-        ]
+        "type": "command",
+        "command": "node ./hooks/sdlc.mjs start antigravity",
+        "timeout": 10
       }
     ],
     "PreToolUse": [
       {
-        "matcher": ".*",
+        "matcher": "edit_file|write_file|replace_file_content|multi_replace_file_content|write_to_file|run_command",
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${PLUGIN_ROOT:-$HOME/.gemini/config/plugins/sdlc}/hooks/sdlc.mjs\" guard antigravity",
+            "command": "node ./hooks/sdlc.mjs guard antigravity",
             "timeout": 10
           }
         ]
       }
     ],
-    "Stop": [
+    "PostToolUse": [
       {
+        "matcher": "edit_file|write_file|replace_file_content|multi_replace_file_content|write_to_file",
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${PLUGIN_ROOT:-$HOME/.gemini/config/plugins/sdlc}/hooks/sdlc.mjs\" verify antigravity",
-            "timeout": 600
+            "command": "node ./hooks/sdlc.mjs check antigravity",
+            "timeout": 90
           }
         ]
+      },
+      {
+        "matcher": "run_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ./hooks/sdlc.mjs bash antigravity",
+            "timeout": 120
+          }
+        ]
+      }
+    ],
+    "PostInvocation": [
+      {
+        "type": "command",
+        "command": "node ./hooks/sdlc.mjs flush antigravity",
+        "timeout": 10
+      }
+    ],
+    "Stop": [
+      {
+        "type": "command",
+        "command": "node ./hooks/sdlc.mjs verify antigravity",
+        "timeout": 600
       }
     ]
   }

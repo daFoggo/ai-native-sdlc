@@ -1,0 +1,19 @@
+{
+  "artifactDirectoryPath": "__HOME__/snap/antigravity-cli/common/.gemini/antigravity-cli/brain/040bfd5b-1234-4630-ba55-5223bbdc8d74",
+  "conversationId": "040bfd5b-1234-4630-ba55-5223bbdc8d74",
+  "lastUserInput": "Change src/a.ts so a = 2, create a new file src/b.ts containing 'export const b = 1', then run: cat src/a.ts src/b.ts",
+  "modelName": "gemini-4-neon-high",
+  "stepIdx": 6,
+  "toolCall": {
+    "args": {
+      "CommandLine": "cat src/a.ts src/b.ts",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "Cat src/a.ts and src/b.ts"
+    },
+    "name": "run_command"
+  },
+  "transcriptPath": "__HOME__/snap/antigravity-cli/common/.gemini/antigravity-cli/brain/040bfd5b-1234-4630-ba55-5223bbdc8d74/.system_generated/logs/transcript_full.jsonl",
+  "workspacePaths": [
+    "__CWD__"
+  ]
+}

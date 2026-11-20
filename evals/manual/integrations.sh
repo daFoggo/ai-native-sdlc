@@ -25,12 +25,12 @@ Colour: one accent, #2f6fdf. No gradients, no shadows.
 X
   cat > scripts/check.sh <<'X'
 #!/bin/bash
-if grep -nE -- '-\[[^]]*\]|font-(semibold|bold|extrabold|black)|font-weight: *([6-9]00|bold)|gradient|box-shadow' "$@"; then
+if grep -rnE -- '-\[[^]]*\]|font-(semibold|bold|extrabold|black)|font-weight: *([6-9]00|bold)|gradient|box-shadow' "$@"; then
   echo "Design rule broken (docs/design-system.md): weights 400/500 only, default scale, no gradients or shadows." >&2; exit 1
 fi
 X
   cat > .claude/sdlc.json <<'X'
-{ "verify": "bash scripts/check.sh -r src site 2>/dev/null; test $? -ne 1",
+{ "verify": "bash scripts/check.sh src site 2>/dev/null; test $? -ne 1",
   "check": [{ "glob": "{src,site}/**/*.{ts,tsx,html,css}", "run": "bash scripts/check.sh {file}" }],
   "tests": ["**/*.test.mjs"] }
 X

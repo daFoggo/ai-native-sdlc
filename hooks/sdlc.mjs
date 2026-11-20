@@ -73,7 +73,8 @@ function gitIgnored(root, abs) {
 const SHELL_TOOLS = /^(Bash|run_shell_command|run_command|shell|exec_command)$/i
 // File-writing tools: Claude, Codex (apply_patch), Gemini CLI, Antigravity. Reads are never guarded or checked.
 const EDIT_TOOLS = /^(Edit|Write|MultiEdit|NotebookEdit|apply_patch|write_file|replace|write_to_file|replace_file_content|multi_replace_file_content|edit_file)$/i
-const PATH_KEYS = ["file_path", "notebook_path", "path", "filePath", "absolute_path", "TargetFile", "targetFile"]
+const PATH_KEYS = ["file_path", "notebook_path", "path", "Path", "filePath", "absolute_path", "TargetFile", "targetFile"]
+const OLD_TEXT = (k) => k.startsWith("old") || k === "Target" // the text an edit replaces, never new content
 
 /** Absolute paths a file tool will write: path fields, plus every file a Codex `apply_patch` touches. */
 export function editedFiles(ti, cwd) {
@@ -84,9 +85,10 @@ export function editedFiles(ti, cwd) {
 }
 
 export function normalize(input) {
-  const ti = input.tool_input ?? input.toolInput ?? {}
-  const tool = input.tool_name ?? input.toolName ?? ""
-  const cwd = input.cwd ?? input.workspacePath ?? process.cwd()
+  // Claude/Codex/Gemini: tool_name, tool_input, cwd. Antigravity: toolCall {name, args}, workspacePaths[].
+  const ti = input.tool_input ?? input.toolCall?.args ?? {}
+  const tool = input.tool_name ?? input.toolCall?.name ?? ""
+  const cwd = input.cwd ?? input.workspacePaths?.[0] ?? process.cwd()
   const shell = SHELL_TOOLS.test(tool)
   return {
     tool,
@@ -120,8 +122,8 @@ export function findSecret(text) {
 // nested values included (MultiEdit's edits[]).
 const newContent = (ti) =>
   Object.entries(ti)
-    .filter(([k]) => !PATH_KEYS.includes(k) && !k.startsWith("old"))
-    .map(([, v]) => (typeof v === "string" ? v : JSON.stringify(v, (k, x) => (k.startsWith("old") ? undefined : x))))
+    .filter(([k]) => !PATH_KEYS.includes(k) && !OLD_TEXT(k))
+    .map(([, v]) => (typeof v === "string" ? v : JSON.stringify(v, (k, x) => (OLD_TEXT(k) ? undefined : x))))
     .join("\n")
 
 // ---- guard -----------------------------------------------------------------------------------
@@ -329,6 +331,8 @@ export function start(input) {
 // ---- output: one adapter per host -------------------------------------------------------------
 // Each returns { json } to print, and optionally { stderr, exit }. null means the host has no way to say it.
 
+const pendingFile = (session) => join(tmpdir(), `sdlc-pending-${session}.txt`)
+
 export const HOSTS = {
   // Claude Code. Codex reads the same JSON (and gets the plugin root as CLAUDE_PLUGIN_ROOT too).
   claude: {
@@ -356,11 +360,27 @@ export const HOSTS = {
     block: (m) => ({ json: { decision: "deny", reason: m } }),
     warn: (m) => ({ json: { systemMessage: m } }),
   },
+  // Antigravity: every hook answers JSON ({} = no opinion). PostToolUse can only return {}, so check failures
+  // wait in a per-conversation file and the PostInvocation hook (mode `flush`) injects them before the next call.
   antigravity: {
     nativeRules: false,
+    empty: { json: {} },
+    // PreToolUse must decide; {} or no output denies. "ask" defers to the user's normal permission flow
+    // (it honours "Always Allow"), which is what a tool call gets when no hook runs.
+    pass: { json: { decision: "ask" } },
     start: (m) => ({ json: { injectSteps: [{ systemMessage: { systemMessage: m } }] } }),
     guard: (g) => ({ json: { decision: g.decision, reason: g.reason } }),
-    context: () => null, // PostToolUse can only return {}; verify on Stop still catches what check would have
+    context: (m, session) => {
+      writeFileSync(pendingFile(session), `${existsSync(pendingFile(session)) ? readFileSync(pendingFile(session), "utf8") + "\n\n" : ""}${m}`)
+      return { json: {} }
+    },
+    flush: (session) => {
+      const f = pendingFile(session)
+      if (!existsSync(f)) return null
+      const m = readFileSync(f, "utf8")
+      rmSync(f, { force: true })
+      return { json: { injectSteps: [{ systemMessage: { systemMessage: m } }] } }
+    },
     block: (m) => ({ json: { decision: "continue", reason: m } }),
     warn: () => null,
   },
@@ -376,6 +396,7 @@ export function hostOf(input, named = "claude") {
 
 function emit(res) {
   if (!res) return
+  emit.count = (emit.count ?? 0) + 1
   if (res.json) console.log(JSON.stringify(res.json))
   if (res.stderr) process.stderr.write(`${res.stderr}\n`)
   if (res.exit) process.exit(res.exit)
@@ -397,28 +418,37 @@ function main() {
   } catch {}
   const host = HOSTS[hostOf(input, arg)]
   const rules = !host.nativeRules
+  const session = normalize(input).session
+  const said = emit.count
   if (mode === "start") {
     const msg = start(input)
     if (msg) emit(host.start(msg))
   } else if (mode === "guard") {
     const g = guard(input)
     if (g) emit(host.guard(g))
-    else if (normalize(input).shell && host.context("") !== null) markBash(input) // a host that can't report skips it
+    else {
+      if (host.pass) emit(host.pass)
+      if (normalize(input).shell) markBash(input)
+    }
   } else if (mode === "check") {
     const msg = check(input, { rules })
-    if (msg) emit(host.context(msg))
+    if (msg) emit(host.context(msg, session))
   } else if (mode === "bash") {
     const mark = bashMark(normalize(input))
-    if (!existsSync(mark)) return
-    const since = Number(readFileSync(mark, "utf8")) - 1000 // mtime granularity on some filesystems is 1 s
-    rmSync(mark, { force: true })
-    const msg = bashCheck(input, since, { rules })
-    if (msg) emit(host.context(msg))
+    if (existsSync(mark)) {
+      const since = Number(readFileSync(mark, "utf8")) - 1000 // mtime granularity on some filesystems is 1 s
+      rmSync(mark, { force: true })
+      const msg = bashCheck(input, since, { rules })
+      if (msg) emit(host.context(msg, session))
+    }
+  } else if (mode === "flush") {
+    if (host.flush) emit(host.flush(session))
   } else if (mode === "verify") {
     const { block, warn } = verify(input, join(tmpdir(), `sdlc-${normalize(input).session}.json`))
     if (block.length) emit(host.block(`Not done yet: the project's verify command fails. Fix it, then finish.\n\n${block.join("\n\n")}`))
     if (warn.length) emit(host.warn(`sdlc: verify still fails after ${MAX_BLOCKS} tries; stopping anyway.\n${warn.join("\n\n")}`))
   }
+  if (emit.count === said && host.empty) emit(host.empty) // hosts that want JSON on every call
 }
 
 if (resolve(process.argv[1] ?? "") === fileURLToPath(import.meta.url)) {

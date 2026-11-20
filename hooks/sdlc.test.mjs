@@ -20,8 +20,8 @@ function repo(config, dir = ".claude") {
 
 const edit = (root, rel, extra = {}) => ({ tool_name: "Edit", tool_input: { file_path: join(root, rel), ...extra }, cwd: root })
 const reason = (g) => g?.reason ?? null
-const fixture = (name, cwd) =>
-  JSON.parse(readFileSync(new URL(`./fixtures/codex/${name}`, import.meta.url), "utf8").replaceAll("__CWD__", cwd))
+const fixture = (name, cwd, host = "codex") =>
+  JSON.parse(readFileSync(new URL(`./fixtures/${host}/${name}`, import.meta.url), "utf8").replaceAll("__CWD__", cwd))
 
 test("guard denies protected paths and allows the rest", () => {
   const root = repo({ protect: [{ glob: "vendor/**", reason: "vendored" }] })
@@ -199,7 +199,6 @@ test("every host adapter answers each mode in its own format", () => {
   assert.deepEqual(HOSTS.gemini.block("m").json, { decision: "deny", reason: "m" })
   assert.equal(HOSTS.antigravity.start("m").json.injectSteps[0].systemMessage.systemMessage, "m")
   assert.deepEqual(HOSTS.antigravity.block("m").json, { decision: "continue", reason: "m" })
-  assert.equal(HOSTS.antigravity.context("m"), null)
   assert.equal(HOSTS.claude.block("m").exit, 2)
   for (const h of Object.values(HOSTS)) for (const k of ["start", "guard", "context", "block", "warn"]) assert.equal(typeof h[k], "function")
 })
@@ -212,4 +211,31 @@ test("hook output for Codex: Stop blocks with exit 2 from the real payload", () 
   const v = spawnSync("node", [SCRIPT, "verify"], { input: JSON.stringify({ ...fixture("stop.json", root), session_id: `c${process.pid}${Date.now()}` }), encoding: "utf8", env })
   assert.equal(v.status, 2)
   assert.match(v.stderr, /verify failed/)
+})
+
+test("Antigravity (real payloads): guard reads toolCall, check failures reach the model through flush", () => {
+  const root = repo({ protect: [{ glob: "vendor/**", reason: "vendored" }], check: [{ glob: "src/**", run: "! grep -q bad {file}" }], verify: "exit 1" })
+  const write = fixture("pre-write-file.json", root, "antigravity")
+  const e = normalize(write)
+  assert.deepEqual(e.files, [join(root, "src/b.ts")])
+  assert.equal(e.cwd, root)
+  assert.equal(normalize(fixture("pre-run-command.json", root, "antigravity")).command, "cat src/a.ts src/b.ts")
+  const moved = { ...write, toolCall: { ...write.toolCall, args: { ...write.toolCall.args, Path: join(root, "vendor/x.ts") } } }
+  assert.match(reason(guard(moved)), /protected: vendored/)
+  const key = "AKIA" + "ABCDEFGHIJKLMNOP"
+  assert.match(reason(guard({ ...write, toolCall: { name: "edit_file", args: { Path: join(root, "src/a.ts"), Target: "x", Replacement: key } } })), /AWS access key/)
+  assert.equal(guard({ ...write, toolCall: { name: "edit_file", args: { Path: join(root, "src/a.ts"), Target: key, Replacement: "x" } } }), null)
+
+  const session = `ag${process.pid}${Date.now()}`
+  const hook = (mode, payload) => spawnSync("node", [SCRIPT, mode, "antigravity"], { input: JSON.stringify({ ...payload, conversationId: session }), encoding: "utf8", cwd: tmpdir() })
+  mkdirSync(join(root, "src"))
+  writeFileSync(join(root, "src/b.ts"), "bad")
+  assert.equal(hook("check", write).stdout.trim(), "{}") // PostToolUse may only answer {}
+  const flushed = JSON.parse(hook("flush", {}).stdout)
+  assert.match(flushed.injectSteps[0].systemMessage.systemMessage, /check failed on src\/b\.ts/)
+  assert.equal(hook("flush", {}).stdout.trim(), "{}") // delivered once
+  assert.deepEqual(JSON.parse(hook("guard", write).stdout), { decision: "ask" }) // {} would deny
+  const stop = JSON.parse(hook("verify", fixture("stop.json", root, "antigravity")).stdout)
+  assert.equal(stop.decision, "continue")
+  assert.match(stop.reason, /verify failed/)
 })

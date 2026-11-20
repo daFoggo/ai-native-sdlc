@@ -30,7 +30,7 @@ defects. So the reviewer runs on the most capable model, once, and re-reviews lo
 |---|---|---|
 | Claude Code | `/plugin marketplace add daFoggo/ai-native-sdlc` then `/plugin install sdlc@ai-native-sdlc` | Everything below works |
 | Codex (CLI, desktop) | `codex plugin marketplace add daFoggo/ai-native-sdlc` then `codex plugin add sdlc@ai-native-sdlc`; trust the hooks once with `/hooks` | Same hooks file as Claude. No reviewer agent file (Codex plugins cannot ship one): the skill starts a fresh subagent with `skills/sdlc/references/reviewer.md`. Codex Cloud runs skills, not hooks |
-| Antigravity | `agy plugin install https://github.com/daFoggo/ai-native-sdlc` | Skills, guard and the Stop verify. Its PostToolUse cannot return text, so a failed per-edit check shows up at Stop instead. **Not yet run end to end** |
+| Antigravity | `agy plugin install https://github.com/daFoggo/ai-native-sdlc` | Run end to end with `agy` 1.4.12: the SessionStart pointer, guard, per-edit check and Stop verify all fire. Its PostToolUse can only answer `{}`, so a failed check is held and injected by the PostInvocation hook before the next model call. Its PreToolUse must decide; with nothing to block, guard answers `ask` (the normal permission flow). The snap build cannot see your `node`: copy it to `~/snap/antigravity-cli/common/local/bin/node` |
 | Gemini CLI | `gemini extensions install https://github.com/daFoggo/ai-native-sdlc`, then merge `hooks/gemini.json` into `.gemini/settings.json` | Gemini auto-loads `hooks/hooks.json`, a path Claude and Codex also read, so its hooks ship as a template. **Not yet run end to end** |
 
 The plugin does nothing in a repo until that repo has an `sdlc.json` (in `.agents/` or `.claude/`). Run the

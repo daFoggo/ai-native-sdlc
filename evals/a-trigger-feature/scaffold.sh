@@ -23,14 +23,14 @@ X
 cat > scripts/check.sh <<'X'
 #!/bin/bash
 # Fails on arbitrary Tailwind values and on weights other than normal/medium.
-if grep -nE -- '-\[[^]]*\]|font-(semibold|bold|extrabold|black)' "$@"; then
+if grep -rnE -- '-\[[^]]*\]|font-(semibold|bold|extrabold|black)' "$@"; then
   echo "Design rule broken: use the Tailwind default scale; weights are font-normal and font-medium only." >&2
   exit 1
 fi
 X
 cat > .claude/sdlc.json <<'X'
 {
-  "verify": "bash scripts/check.sh -r src",
+  "verify": "bash scripts/check.sh src",
   "check": [{ "glob": "src/**/*.tsx", "run": "bash scripts/check.sh {file}" }],
   "protect": [{ "glob": "vendor/**", "reason": "vendored UI kit, kept byte-identical; restyle through props or a wrapper in src/" }]
 }
