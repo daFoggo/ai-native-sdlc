@@ -1,0 +1,60 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ~/.gemini/extensions/sdlc/hooks/sdlc.mjs start gemini",
+            "timeout": 10000
+          }
+        ]
+      }
+    ],
+    "BeforeTool": [
+      {
+        "matcher": "write_file|replace|run_shell_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ~/.gemini/extensions/sdlc/hooks/sdlc.mjs guard gemini",
+            "timeout": 10000
+          }
+        ]
+      }
+    ],
+    "AfterTool": [
+      {
+        "matcher": "write_file|replace",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ~/.gemini/extensions/sdlc/hooks/sdlc.mjs check gemini",
+            "timeout": 90000
+          }
+        ]
+      },
+      {
+        "matcher": "run_shell_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ~/.gemini/extensions/sdlc/hooks/sdlc.mjs bash gemini",
+            "timeout": 120000
+          }
+        ]
+      }
+    ],
+    "AfterAgent": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ~/.gemini/extensions/sdlc/hooks/sdlc.mjs verify gemini",
+            "timeout": 600000
+          }
+        ]
+      }
+    ]
+  }
+}

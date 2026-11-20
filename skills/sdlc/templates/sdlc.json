@@ -2,12 +2,42 @@
   "verify": "<one command that exits non-zero on failure: lint, types, tests>",
   "verifyTimeout": 540,
   "check": [
-    { "glob": "src/**/*.{ts,tsx}", "cwd": ".", "run": "<fast per-file check, {file} is relative to cwd>" }
+    {
+      "glob": "src/**/*.{ts,tsx}",
+      "cwd": ".",
+      "run": "<fast per-file check, {file} is relative to cwd>"
+    }
   ],
-  "protect": [{ "glob": "<vendored or generated path>/**", "reason": "<why and the right way to change it>" }],
-  "denyBash": [{ "pattern": "<regex>", "reason": "<why and the right command>" }],
-  "tests": ["**/*.test.{ts,tsx}", "**/__tests__/**"],
-  "riskyPaths": ["<auth, money, migrations>"],
+  "protect": [
+    {
+      "glob": "<vendored or generated path>/**",
+      "reason": "<why and the right way to change it>"
+    }
+  ],
+  "denyBash": [
+    {
+      "pattern": "<regex>",
+      "reason": "<why and the right command>"
+    }
+  ],
+  "approve": [
+    {
+      "glob": "<path that needs a named approval, e.g. db/migrations/**>",
+      "reason": "<who approves and how>"
+    },
+    {
+      "pattern": "<regex for a gated command, e.g. deploy.*prod>",
+      "reason": "<who approves and how>"
+    }
+  ],
+  "tests": [
+    "**/*.test.{ts,tsx}",
+    "**/__tests__/**"
+  ],
+  "riskyPaths": [
+    "<auth, money, migrations>"
+  ],
+  "secrets": true,
   "artifacts": "docs/work",
   "debt": "docs/debt.md",
   "providers": {}

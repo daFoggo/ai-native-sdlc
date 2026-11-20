@@ -1,0 +1,28 @@
+# Continuous evals (playbook, Stage 4): the configuration that steers the agent is regression-tested like code.
+# Each case in evals/*.json is a real task from recent work: {"prompt": "...", "check": "<command that exits 0 when
+# the result is acceptable>"}. Start with 20 to 50; every production incident adds one. Gate config PRs on the result.
+name: Agent evals
+on:
+  pull_request:
+    paths: ['CLAUDE.md', 'AGENTS.md', '.claude/**', '.agents/**', 'REVIEW.md']
+  schedule:
+    - cron: '0 2 * * *'
+jobs:
+  evals:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm install -g @anthropic-ai/claude-code
+      - name: Run eval suite
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          pass=0; total=0
+          for eval in evals/*.json; do
+            total=$((total+1))
+            claude -p "$(jq -r '.prompt' "$eval")" --allowedTools "Read,Edit,Write,Bash" --output-format json > /dev/null
+            if bash -c "$(jq -r '.check' "$eval")"; then pass=$((pass+1)); else echo "FAIL $eval"; fi
+            git checkout -q . && git clean -fdq
+          done
+          echo "pass rate: $pass/$total"
+          test "$pass" -eq "$total"

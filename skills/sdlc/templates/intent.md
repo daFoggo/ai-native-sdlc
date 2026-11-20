@@ -1,6 +1,6 @@
 # Intent: <short name>
 Author: <who asked>. Status: draft | accepted | closed.
-Source: <conversation, ticket id, incident, breached check>
+Source: <conversation, ticket id, incident, breached check>. Record: <ticket or incident ID, or none>
 
 ## Problem
 <What cannot be done today, in the originator's words. Who it hurts and how often.>

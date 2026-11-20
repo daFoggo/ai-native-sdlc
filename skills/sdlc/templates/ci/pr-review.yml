@@ -1,0 +1,36 @@
+# PR review in CI (playbook, Stage 5): every PR gets the same review against REVIEW.md, spec.md and plan.md.
+# Findings inform; a code owner still approves through branch protection. Tagging @claude on a review comment
+# asks Claude to address it and push the fix. Check anthropics/claude-code-action's README for current inputs.
+name: PR review
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review]
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+jobs:
+  review:
+    if: github.event_name == 'pull_request' && !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    permissions: { contents: read, pull-requests: write, id-token: write }
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Review this pull request. Read REVIEW.md at the repo root first; it is the policy. If the PR adds or
+            touches docs/work/*/spec.md or plan.md, check the diff against them. Tag each finding Must, Should or
+            Minor, give each a concrete input or situation that fails, and post them as review comments with a
+            summary that counts findings per severity.
+  respond:
+    if: github.event_name != 'pull_request' && contains(github.event.comment.body, '@claude')
+    runs-on: ubuntu-latest
+    permissions: { contents: write, pull-requests: write, issues: write, id-token: write }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}

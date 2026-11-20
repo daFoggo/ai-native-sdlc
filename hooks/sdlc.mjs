@@ -1,33 +1,42 @@
 #!/usr/bin/env node
-// sdlc-core hooks. One script, one mode per hook event:
-//   start   SessionStart one line telling Claude this repo follows the sdlc skill (skills trigger unreliably alone)
-//   guard   PreToolUse   deny edits to protected paths, test edits in fix mode, banned shell commands
-//   check   PostToolUse  run the project's fast check on the edited file; silent when it passes
-//   bash    PostToolUse  same check on files a shell command changed (guard marks when the command started)
-//   verify  Stop         run the project's verify command when the tree changed since the last green run
-//   fix on|off           mark the repo as fixing a bug: tests become read-only until `fix off`
-// A repo opts in with .claude/sdlc.json (machine-only overrides in .claude/sdlc.local.json).
+// sdlc hooks. One script, one mode per hook event, for every agent host:
+//   start   SessionStart  one line telling the agent this repo follows the sdlc skill (skills trigger unreliably alone)
+//   guard   before a tool deny edits to protected paths, secrets in new content, test edits in fix mode, banned
+//                         shell commands; ask for approval on gated paths and commands
+//   check   after an edit run the project's fast check on the edited files; silent when it passes. Hosts without
+//                         path-scoped rules also get the matching rule cards the first time a file needs them
+//   bash    after a shell same check on files the command changed (guard marks when the command started)
+//   verify  Stop          run the project's verify command when the tree changed since the last green run
+//   fix on|off            mark the repo as fixing a bug: tests become read-only until `fix off`
+// Usage: node sdlc.mjs <mode> [host]. Hosts: claude (also Codex, which speaks the same JSON), gemini, antigravity.
+// A repo opts in with .agents/sdlc.json or .claude/sdlc.json (machine-only overrides in sdlc.local.json beside it).
 // Without one every mode exits 0 and prints nothing, so the plugin is safe to install everywhere.
 
 import { execFileSync, spawnSync } from "node:child_process"
 import { createHash } from "node:crypto"
 import { existsSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { homedir, tmpdir } from "node:os"
-import { dirname, isAbsolute, join, matchesGlob, relative, resolve } from "node:path"
+import { dirname, join, matchesGlob, relative, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
+import { matchingRules } from "../skills/sdlc/scripts/review-package.mjs"
+
 const MAX_BLOCKS = 3 // Stop blocks per session and repo before verify only warns: the review-loop cap.
+const CONFIG_DIRS = [".agents", ".claude"]
+
+const configDir = (dir) => CONFIG_DIRS.map((c) => join(dir, c)).find((c) => existsSync(join(c, "sdlc.json")))
 
 export function findRoot(start) {
   for (let dir = resolve(start); ; dir = dirname(dir)) {
-    if (existsSync(join(dir, ".claude", "sdlc.json"))) return dir
+    if (configDir(dir)) return dir
     if (dirname(dir) === dir) return null
   }
 }
 
 export function loadConfig(root) {
+  const dir = configDir(root)
   const read = (f) => (existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : {})
-  return { ...read(join(root, ".claude", "sdlc.json")), ...read(join(root, ".claude", "sdlc.local.json")) }
+  return { ...read(join(dir, "sdlc.json")), ...read(join(dir, "sdlc.local.json")) }
 }
 
 const matches = (rel, globs) => [globs].flat().some((g) => matchesGlob(rel, g))
@@ -53,44 +62,130 @@ function gitDir(root) {
     return null
   }
 }
-const fixFlag = (root) => join(gitDir(root) ?? join(root, ".claude"), "sdlc-fix-mode")
+const fixFlag = (root) => join(gitDir(root) ?? configDir(root), "sdlc-fix-mode")
 
-// ---- guard ----------------------------------------------------------------------------------
+function gitIgnored(root, abs) {
+  return spawnSync("git", ["check-ignore", "-q", abs], { cwd: root }).status === 0
+}
 
-export function guard(input) {
-  const { tool_name: tool, tool_input: ti = {}, cwd = process.cwd() } = input
-  if (tool === "Bash") {
-    // From a multi-repo parent folder the command may `cd` into any child repo: apply all of theirs.
-    const roots = findRoot(cwd) ? [findRoot(cwd)] : verifyRoots(cwd)
-    const bans = roots.flatMap((r) => loadConfig(r).denyBash ?? [])
-    const ban = bans.find((b) => new RegExp(b.pattern).test(ti.command ?? ""))
-    return ban ? `Blocked by .claude/sdlc.json: ${ban.reason}` : null
+// ---- input: one shape for every host ----------------------------------------------------------
+
+const SHELL_TOOLS = /^(Bash|run_shell_command|run_command|shell|exec_command)$/i
+// File-writing tools: Claude, Codex (apply_patch), Gemini CLI, Antigravity. Reads are never guarded or checked.
+const EDIT_TOOLS = /^(Edit|Write|MultiEdit|NotebookEdit|apply_patch|write_file|replace|write_to_file|replace_file_content|multi_replace_file_content|edit_file)$/i
+const PATH_KEYS = ["file_path", "notebook_path", "path", "filePath", "absolute_path", "TargetFile", "targetFile"]
+
+/** Absolute paths a file tool will write: path fields, plus every file a Codex `apply_patch` touches. */
+export function editedFiles(ti, cwd) {
+  const files = PATH_KEYS.map((k) => ti[k]).filter((v) => typeof v === "string")
+  const patch = [ti.command, ti.patch, ti.input].find((v) => typeof v === "string") ?? ""
+  for (const m of patch.matchAll(/^\*\*\* (?:(?:Add|Update|Delete) File|Move to): (.+)$/gm)) files.push(m[1].trim())
+  return [...new Set(files.map((f) => resolve(cwd, f)))]
+}
+
+export function normalize(input) {
+  const ti = input.tool_input ?? input.toolInput ?? {}
+  const tool = input.tool_name ?? input.toolName ?? ""
+  const cwd = input.cwd ?? input.workspacePath ?? process.cwd()
+  const shell = SHELL_TOOLS.test(tool)
+  return {
+    tool,
+    ti,
+    cwd,
+    shell,
+    command: shell ? String(ti.command ?? ti.CommandLine ?? ti.commandLine ?? "") : "",
+    files: EDIT_TOOLS.test(tool) ? editedFiles(ti, cwd) : [],
+    session: input.session_id ?? input.sessionId ?? input.conversationId ?? "nosession",
+    toolUse: input.tool_use_id ?? input.toolUseId ?? input.toolCallId ?? "x",
   }
-  const file = ti.file_path ?? ti.notebook_path
-  if (!file) return null
-  const abs = isAbsolute(file) ? file : resolve(cwd, file)
+}
+
+// ---- secrets ---------------------------------------------------------------------------------
+
+const SECRETS = [
+  [/-----BEGIN (?:RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----/, "a private key"],
+  [/\bAKIA[0-9A-Z]{16}\b/, "an AWS access key"],
+  [/\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36}\b|\bgithub_pat_[A-Za-z0-9_]{60,}/, "a GitHub token"],
+  [/\bxox[abposr]-[A-Za-z0-9-]{10,}/, "a Slack token"],
+  [/\bAIza[0-9A-Za-z_-]{35}\b/, "a Google API key"],
+  [/\bsk-(?:ant-|proj-)?[A-Za-z0-9_-]{32,}/, "an API secret key"],
+]
+
+/** The kind of the first secret found in text, or null. */
+export function findSecret(text) {
+  return SECRETS.find(([re]) => re.test(text))?.[1] ?? null
+}
+
+// New content a file tool is about to write: its input minus path fields and the text being replaced (old_*),
+// nested values included (MultiEdit's edits[]).
+const newContent = (ti) =>
+  Object.entries(ti)
+    .filter(([k]) => !PATH_KEYS.includes(k) && !k.startsWith("old"))
+    .map(([, v]) => (typeof v === "string" ? v : JSON.stringify(v, (k, x) => (k.startsWith("old") ? undefined : x))))
+    .join("\n")
+
+// ---- guard -----------------------------------------------------------------------------------
+
+/** {decision: "deny" | "ask", reason} or null. */
+export function guard(input) {
+  const e = normalize(input)
+  if (e.shell) {
+    // From a multi-repo parent folder the command may `cd` into any child repo: apply all of theirs.
+    const roots = findRoot(e.cwd) ? [findRoot(e.cwd)] : verifyRoots(e.cwd)
+    const configs = roots.map(loadConfig)
+    const hit = (list) => list.find((b) => new RegExp(b.pattern).test(e.command))
+    const ban = hit(configs.flatMap((c) => c.denyBash ?? []))
+    if (ban) return { decision: "deny", reason: `Blocked by sdlc.json: ${ban.reason}` }
+    const gate = hit(configs.flatMap((c) => (c.approve ?? []).filter((a) => a.pattern)))
+    if (gate) return { decision: "ask", reason: `Needs approval (sdlc.json): ${gate.reason}` }
+    return null
+  }
+  for (const abs of e.files) {
+    const root = findRoot(dirname(abs))
+    if (!root) continue
+    const config = loadConfig(root)
+    const rel = relative(root, abs)
+    const p = (config.protect ?? []).find((x) => matches(rel, x.glob))
+    if (p) return { decision: "deny", reason: `${rel} is protected: ${p.reason}` }
+    if (existsSync(fixFlag(root)) && matches(rel, config.tests ?? []))
+      return {
+        decision: "deny",
+        reason: `Fix mode: ${rel} is a test. Fix the code, not the test. If the test itself is wrong, say so and ask; the user ends fix mode with \`sdlc fix off\`.`,
+      }
+    const secret = config.secrets !== false && !gitIgnored(root, abs) && findSecret(newContent(e.ti))
+    if (secret)
+      return {
+        decision: "deny",
+        reason: `This edit would put ${secret} into ${rel}, a tracked file. Read it from the environment or a gitignored file instead.`,
+      }
+    const gate = (config.approve ?? []).find((a) => a.glob && matches(rel, a.glob))
+    if (gate) return { decision: "ask", reason: `Needs approval (sdlc.json): ${gate.reason}` }
+  }
+  return null
+}
+
+// ---- check -----------------------------------------------------------------------------------
+
+function seenOnce(session, key) {
+  const f = join(tmpdir(), `sdlc-seen-${session}.json`)
+  const seen = existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : []
+  if (seen.includes(key)) return true
+  writeFileSync(f, JSON.stringify([...seen, key]))
+  return false
+}
+
+/** Checks one existing file. `rules`: also return the rule cards it needs that this session has not seen. */
+export function checkFile(abs, { rules = false, session = "nosession" } = {}) {
+  if (!existsSync(abs)) return null
   const root = findRoot(dirname(abs))
   if (!root) return null
   const config = loadConfig(root)
   const rel = relative(root, abs)
-  const p = (config.protect ?? []).find((x) => matches(rel, x.glob))
-  if (p) return `${rel} is protected: ${p.reason}`
-  if (existsSync(fixFlag(root)) && matches(rel, config.tests ?? []))
-    return `Fix mode: ${rel} is a test. Fix the code, not the test. If the test itself is wrong, say so and ask; the user ends fix mode with \`sdlc fix off\`.`
-  return null
-}
-
-// ---- check ----------------------------------------------------------------------------------
-
-export function check(input) {
-  const ti = input.tool_input ?? {}
-  const file = ti.file_path ?? ti.notebook_path
-  if (!file || !existsSync(file)) return null
-  const root = findRoot(dirname(resolve(input.cwd ?? process.cwd(), file)))
-  if (!root) return null
-  const config = loadConfig(root)
-  const abs = resolve(input.cwd ?? process.cwd(), file)
-  const rel = relative(root, abs)
+  const out = []
+  if (rules) {
+    const cards = matchingRules(root, [rel]).filter((r) => !seenOnce(session, `${root}:${r.name}`))
+    if (cards.length) out.push(`Project rules for ${rel}:\n${cards.map((r) => r.text).join("\n\n")}`)
+  }
   const failures = []
   for (const c of config.check ?? []) {
     if (!matches(rel, c.glob)) continue
@@ -98,17 +193,26 @@ export function check(input) {
     const r = run(c.run.replaceAll("{file}", quote(relative(cwd, abs))), cwd, config, c.timeout ?? 60)
     if (!r.ok) failures.push(`$ ${c.run} (in ${c.cwd ?? "."})\n${tail(r.out)}`)
   }
-  return failures.length ? `Project check failed on ${rel}. Fix it before moving on:\n${failures.join("\n\n")}` : null
+  const secret = config.secrets !== false && !gitIgnored(root, abs) && findSecret(readFileSync(abs, "utf8"))
+  if (secret) failures.push(`${rel} contains ${secret}. Remove it and read it from the environment instead.`)
+  if (failures.length) out.push(`Project check failed on ${rel}. Fix it before moving on:\n${failures.join("\n\n")}`)
+  return out.length ? out.join("\n\n") : null
+}
+
+export function check(input, { rules = false } = {}) {
+  const e = normalize(input)
+  const msgs = e.files.map((f) => checkFile(f, { rules, session: e.session })).filter(Boolean)
+  return msgs.length ? msgs.join("\n\n") : null
 }
 
 // ---- bash: edits made through the shell (sed, heredocs, codemods) ---------------------------
 
 const MAX_BASH_FILES = 20 // a codegen or install that touches more is not an edit to lint file by file
-const bashMark = (input) => join(tmpdir(), `sdlc-bash-${input.session_id ?? "nosession"}-${input.tool_use_id ?? "x"}`)
+const bashMark = (e) => join(tmpdir(), `sdlc-bash-${e.session}-${e.toolUse}`)
 
 export function markBash(input) {
-  const cwd = input.cwd ?? process.cwd()
-  if (findRoot(cwd) || verifyRoots(cwd).length) writeFileSync(bashMark(input), String(Date.now()))
+  const e = normalize(input)
+  if (findRoot(e.cwd) || verifyRoots(e.cwd).length) writeFileSync(bashMark(e), String(Date.now()))
 }
 
 // Dirty files (tracked or untracked) under root modified at or after `since`.
@@ -130,9 +234,9 @@ export function changedSince(root, since) {
   return files
 }
 
-export function bashCheck(input, since) {
-  const cwd = input.cwd ?? process.cwd()
-  const roots = findRoot(cwd) ? [findRoot(cwd)] : verifyRoots(cwd)
+export function bashCheck(input, since, { rules = false } = {}) {
+  const e = normalize(input)
+  const roots = findRoot(e.cwd) ? [findRoot(e.cwd)] : verifyRoots(e.cwd)
   const msgs = []
   for (const root of roots) {
     let files
@@ -149,14 +253,14 @@ export function bashCheck(input, since) {
         msgs.push(`Fix mode: this command changed tests (${tests.join(", ")}). Restore them with \`git checkout -- <file>\` and fix the code instead, or ask the user if a test is wrong.`)
     }
     for (const f of files) {
-      const m = check({ tool_input: { file_path: f }, cwd: root })
+      const m = checkFile(f, { rules, session: e.session })
       if (m) msgs.push(m)
     }
   }
   return msgs.length ? msgs.join("\n\n") : null
 }
 
-// ---- verify ---------------------------------------------------------------------------------
+// ---- verify ----------------------------------------------------------------------------------
 
 function fingerprint(root) {
   const git = (...a) =>
@@ -179,15 +283,17 @@ export function verifyRoots(base) {
     for (const d of readdirSync(base, { withFileTypes: true }))
       if (d.isDirectory() && !d.name.startsWith(".")) dirs.push(join(base, d.name))
   } catch {}
-  return dirs.filter((d) => existsSync(join(d, ".claude", "sdlc.json")))
+  return dirs.filter((d) => configDir(d))
 }
+
+const projectDir = (input) =>
+  process.env.CLAUDE_PROJECT_DIR ?? process.env.GEMINI_PROJECT_DIR ?? normalize(input).cwd
 
 export function verify(input, stateFile) {
   const state = existsSync(stateFile) ? JSON.parse(readFileSync(stateFile, "utf8")) : {}
-  const base = process.env.CLAUDE_PROJECT_DIR ?? input.cwd ?? process.cwd()
   const block = []
   const warn = []
-  for (const root of verifyRoots(base)) {
+  for (const root of verifyRoots(projectDir(input))) {
     const config = loadConfig(root)
     if (!config.verify) continue
     let fp
@@ -210,23 +316,76 @@ export function verify(input, stateFile) {
   return { block, warn }
 }
 
-// ---- start ---------------------------------------------------------------------------------
+// ---- start -----------------------------------------------------------------------------------
 
 export function start(input) {
-  const base = process.env.CLAUDE_PROJECT_DIR ?? input.cwd ?? process.cwd()
+  const base = projectDir(input)
   const roots = findRoot(base) ? [findRoot(base)] : verifyRoots(base)
   if (!roots.length) return null
   const where = roots.map((r) => relative(base, r) || ".").join(", ")
-  return `This workspace follows the sdlc process (.claude/sdlc.json in: ${where}). Before any code change, review or plan there, invoke the \`sdlc\` skill and state the lane (S, M or L) with its reason.`
+  return `This workspace follows the sdlc process (sdlc.json in: ${where}). Before any code change, review or plan there, invoke the \`sdlc\` skill and state the lane (S, M or L) with its reason.`
 }
 
-// ---- main -----------------------------------------------------------------------------------
+// ---- output: one adapter per host -------------------------------------------------------------
+// Each returns { json } to print, and optionally { stderr, exit }. null means the host has no way to say it.
+
+export const HOSTS = {
+  // Claude Code. Codex reads the same JSON (and gets the plugin root as CLAUDE_PLUGIN_ROOT too).
+  claude: {
+    nativeRules: true,
+    start: (m) => ({ json: { hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: m } } }),
+    guard: (g) => ({ json: { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: g.decision, permissionDecisionReason: g.reason } } }),
+    context: (m) => ({ json: { hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: m } } }),
+    block: (m) => ({ stderr: m, exit: 2 }),
+    warn: (m) => ({ json: { systemMessage: m } }),
+  },
+  // Codex: as Claude, but no path-scoped rules, and no documented "ask" from a hook.
+  codex: {
+    nativeRules: false,
+    start: (m) => HOSTS.claude.start(m),
+    guard: (g) => HOSTS.claude.guard({ decision: "deny", reason: g.decision === "ask" ? `${g.reason}. Ask the user, and retry only after they approve.` : g.reason }),
+    context: (m) => HOSTS.claude.context(m),
+    block: (m) => HOSTS.claude.block(m),
+    warn: (m) => HOSTS.claude.warn(m),
+  },
+  gemini: {
+    nativeRules: false,
+    start: (m) => ({ json: { hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: m } } }),
+    guard: (g) => ({ json: { decision: g.decision, reason: g.reason } }),
+    context: (m) => ({ json: { hookSpecificOutput: { hookEventName: "AfterTool", additionalContext: m } } }),
+    block: (m) => ({ json: { decision: "deny", reason: m } }),
+    warn: (m) => ({ json: { systemMessage: m } }),
+  },
+  antigravity: {
+    nativeRules: false,
+    start: (m) => ({ json: { injectSteps: [{ systemMessage: { systemMessage: m } }] } }),
+    guard: (g) => ({ json: { decision: g.decision, reason: g.reason } }),
+    context: () => null, // PostToolUse can only return {}; verify on Stop still catches what check would have
+    block: (m) => ({ json: { decision: "continue", reason: m } }),
+    warn: () => null,
+  },
+}
+
+/** The host a payload came from: the one named on the command line, except Codex, told apart by its payload. */
+export function hostOf(input, named = "claude") {
+  if (named === "claude" && (input.turn_id !== undefined || input.tool_name === "apply_patch")) return "codex"
+  return HOSTS[named] ? named : "claude"
+}
+
+// ---- main ------------------------------------------------------------------------------------
+
+function emit(res) {
+  if (!res) return
+  if (res.json) console.log(JSON.stringify(res.json))
+  if (res.stderr) process.stderr.write(`${res.stderr}\n`)
+  if (res.exit) process.exit(res.exit)
+}
 
 function main() {
   const [mode, arg] = process.argv.slice(2)
   if (mode === "fix") {
     const root = findRoot(process.cwd())
-    if (!root) return console.log("No .claude/sdlc.json above this folder.")
+    if (!root) return console.log("No sdlc.json above this folder.")
     const flag = fixFlag(root)
     if (arg === "on") writeFileSync(flag, new Date().toISOString())
     else rmSync(flag, { force: true })
@@ -236,32 +395,29 @@ function main() {
   try {
     input = JSON.parse(readFileSync(0, "utf8") || "{}")
   } catch {}
+  const host = HOSTS[hostOf(input, arg)]
+  const rules = !host.nativeRules
   if (mode === "start") {
     const msg = start(input)
-    if (msg) console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: msg } }))
+    if (msg) emit(host.start(msg))
   } else if (mode === "guard") {
-    const reason = guard(input)
-    if (!reason && input.tool_name === "Bash") markBash(input)
-    if (reason)
-      console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: reason } }))
+    const g = guard(input)
+    if (g) emit(host.guard(g))
+    else if (normalize(input).shell && host.context("") !== null) markBash(input) // a host that can't report skips it
   } else if (mode === "check") {
-    const msg = check(input)
-    if (msg) console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: msg } }))
+    const msg = check(input, { rules })
+    if (msg) emit(host.context(msg))
   } else if (mode === "bash") {
-    const mark = bashMark(input)
+    const mark = bashMark(normalize(input))
     if (!existsSync(mark)) return
     const since = Number(readFileSync(mark, "utf8")) - 1000 // mtime granularity on some filesystems is 1 s
     rmSync(mark, { force: true })
-    const msg = bashCheck(input, since)
-    if (msg) console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: msg } }))
+    const msg = bashCheck(input, since, { rules })
+    if (msg) emit(host.context(msg))
   } else if (mode === "verify") {
-    const { block, warn } = verify(input, join(tmpdir(), `sdlc-${input.session_id ?? "nosession"}.json`))
-    if (block.length) {
-      process.stderr.write(`Not done yet: the project's verify command fails. Fix it, then finish.\n\n${block.join("\n\n")}\n`)
-      process.exit(2)
-    }
-    if (warn.length)
-      console.log(JSON.stringify({ systemMessage: `sdlc: verify still fails after ${MAX_BLOCKS} tries; stopping anyway.\n${warn.join("\n\n")}` }))
+    const { block, warn } = verify(input, join(tmpdir(), `sdlc-${normalize(input).session}.json`))
+    if (block.length) emit(host.block(`Not done yet: the project's verify command fails. Fix it, then finish.\n\n${block.join("\n\n")}`))
+    if (warn.length) emit(host.warn(`sdlc: verify still fails after ${MAX_BLOCKS} tries; stopping anyway.\n${warn.join("\n\n")}`))
   }
 }
 

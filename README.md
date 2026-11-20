@@ -1,6 +1,6 @@
 # ai-native-sdlc
 
-A Claude Code plugin that runs the [AI-Native SDLC Playbook](https://claude.com/resources/articles/the-ai-native-sdlc-playbook)
+A plugin for Claude Code, Codex, Antigravity and Gemini CLI that runs the [AI-Native SDLC Playbook](https://claude.com/resources/articles/the-ai-native-sdlc-playbook)
 in any repo: work goes through lanes from intent to merge, review stops after three rounds, and each project's own
 standards are enforced by hooks instead of being left to the agent's memory.
 
@@ -15,7 +15,7 @@ Agents miss a project's standards for three reasons, and each has a mechanical f
 
 | Why standards get missed | What this plugin does |
 |---|---|
-| Docs are read only when the agent thinks of it | Path-scoped rule cards (`.claude/rules/*.md` with `paths:`) load when a matching file is touched; the review package hands the same cards to the reviewer |
+| Docs are read only when the agent thinks of it | Path-scoped rule cards (`.claude/rules/*.md` with `paths:`) load when a matching file is touched (on hosts without path rules, the check hook hands them over); the review package hands the same cards to the reviewer |
 | A rule written as prose cannot be enforced | `sdlc-init` turns every checkable rule into a lint rule or script; a hook runs it on each edited file and stays silent when it passes |
 | "Done" is claimed without running anything | A Stop hook runs the project's verify command whenever the tree changed since the last green run |
 
@@ -26,13 +26,24 @@ defects. So the reviewer runs on the most capable model, once, and re-reviews lo
 
 ## Install
 
-```
-/plugin marketplace add daFoggo/ai-native-sdlc
-/plugin install sdlc@ai-native-sdlc
-```
+| Host | Install | Notes |
+|---|---|---|
+| Claude Code | `/plugin marketplace add daFoggo/ai-native-sdlc` then `/plugin install sdlc@ai-native-sdlc` | Everything below works |
+| Codex (CLI, desktop) | `codex plugin marketplace add daFoggo/ai-native-sdlc` then `codex plugin add sdlc@ai-native-sdlc`; trust the hooks once with `/hooks` | Same hooks file as Claude. No reviewer agent file (Codex plugins cannot ship one): the skill starts a fresh subagent with `skills/sdlc/references/reviewer.md`. Codex Cloud runs skills, not hooks |
+| Antigravity | `agy plugin install https://github.com/daFoggo/ai-native-sdlc` | Skills, guard and the Stop verify. Its PostToolUse cannot return text, so a failed per-edit check shows up at Stop instead. **Not yet run end to end** |
+| Gemini CLI | `gemini extensions install https://github.com/daFoggo/ai-native-sdlc`, then merge `hooks/gemini.json` into `.gemini/settings.json` | Gemini auto-loads `hooks/hooks.json`, a path Claude and Codex also read, so its hooks ship as a template. **Not yet run end to end** |
 
-The plugin does nothing in a repo until that repo has `.claude/sdlc.json`. Run the `sdlc-init` skill in a repo to
-create it. Needs Node 22.5 or later (`path.matchesGlob`).
+The plugin does nothing in a repo until that repo has an `sdlc.json` (in `.agents/` or `.claude/`). Run the
+`sdlc-init` skill in a repo to create it. Needs Node 22.5 or later (`path.matchesGlob`).
+
+### Adding another host
+
+Every host reads the same `skills/` (the SKILL.md standard) and calls the same `hooks/sdlc.mjs`. A new host needs:
+a manifest in the layout that host expects; a hooks file that calls `node <root>/hooks/sdlc.mjs <mode> <host>`; an
+entry in `HOSTS` in `hooks/sdlc.mjs` (how that host wants a context line, a deny, a block); and, if its file tools
+have new names, a line in `EDIT_TOOLS`/`SHELL_TOOLS`. Capture a real payload with a probe hook and add it under
+`hooks/fixtures/<host>/`; `hooks/hosts.test.mjs` keeps versions and hook files in step. Never ship
+`hooks/hooks.json`: several hosts auto-load it with different event names.
 
 ## What is inside
 
@@ -40,11 +51,13 @@ create it. Needs Node 22.5 or later (`path.matchesGlob`).
 |---|---|
 | `skills/sdlc` | The process: lanes S/M/L, artifacts (`intent.md`, `spec.md`, `plan.md`), the review loop, the definition of done, the role → provider table |
 | `skills/sdlc-init` | Onboards a repo: inventory the docs' rules, measure violations, enforce what a machine can, write rule cards, `sdlc.json`, `REVIEW.md` |
-| `agents/reviewer.md` | Fresh-context reviewer on the most capable model; full and scoped modes; every finding needs a concrete failing case |
-| `hooks/sdlc.mjs` | `start` (points Claude at the skill in opted-in repos), `guard` (protected paths, banned commands, read-only tests in fix mode), `check` (per-file check after each edit), `bash` (the same check on files a shell command changed), `verify` (on Stop) |
+| `skills/sdlc/references/reviewer.md` | The reviewer's instructions, one copy for every host: full and scoped modes; every finding needs a concrete failing case. `claude/agents/reviewer.md` is the same text as a Claude agent on the most capable model |
+| `hooks/sdlc.mjs` | `start` (points the agent at the skill in opted-in repos), `guard` (protected paths, banned commands, secrets in new content, read-only tests in fix mode, `approve` gates), `check` (per-file check after each edit), `bash` (the same check on files a shell command changed), `verify` (on Stop). One script; `HOSTS` adapts its output to each agent |
+| `skills/sdlc/scripts/metrics.mjs` | The playbook's indicators from git: intent → spec → plan times, spec rework after the plan, agent-instruction and rule-card changes, debt added |
+| `skills/sdlc/templates/ci/`, `maintain/` | The playbook's CI jobs (PR review with claude-code-action, continuous agent evals, build triage) and the closing-the-loop `bands.yaml` |
 | `skills/sdlc/scripts/review-package.mjs` | One file per review: commits, stat, the rule cards that bind the changed files, and the diff |
 
-## `.claude/sdlc.json`
+## `sdlc.json` (`.agents/` or `.claude/`)
 
 ```json
 {
@@ -52,14 +65,16 @@ create it. Needs Node 22.5 or later (`path.matchesGlob`).
   "check": [{ "glob": "apps/web/**/*.{ts,tsx}", "cwd": "apps/web", "run": "pnpm exec eslint --max-warnings 0 {file}" }],
   "protect": [{ "glob": "packages/ui/src/components/ui/**", "reason": "vendored shadcn: change tokens or props" }],
   "denyBash": [{ "pattern": "npm install", "reason": "this repo uses pnpm" }],
+  "approve": [{ "glob": "db/migrations/**", "reason": "migrations need a change ticket from the DBA" }],
   "tests": ["**/*.test.{ts,tsx}"],
   "riskyPaths": ["**/auth/**"],
   "providers": { "style": "ponytail:ponytail" }
 }
 ```
 
-`.claude/sdlc.local.json` (gitignored) overrides it per machine, for example `"pathPrepend": ["~/.local/node/bin"]`.
-In a folder that holds several repos, the Stop hook verifies each child repo that has its own `sdlc.json`.
+`sdlc.local.json` beside it (gitignored) overrides it per machine, for example `"pathPrepend": ["~/.local/node/bin"]`.
+In a folder that holds several repos, the Stop hook verifies each child repo that has its own `sdlc.json`. Secret
+scanning (keys and tokens written into tracked files) is on unless `"secrets": false`.
 
 ## Evals
 

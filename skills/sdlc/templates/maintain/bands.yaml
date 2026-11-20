@@ -1,0 +1,10 @@
+# Closing the loop (playbook, Stage 6). A deterministic script (no model) watches one metric with a rolling
+# baseline; when a band is breached, the tier says what the agent may do. Whatever it finds is written as
+# docs/work/<date>-<slug>/intent.md with Source: the breach and its evidence, and goes through the sdlc lanes.
+metric: ci_test_failure_rate        # or post-deploy 5xx rate, PR cycle time
+baseline: rolling_30d
+rules: western_electric             # catches slow drift as well as spikes
+tiers:
+  1sigma: { action: log }
+  2sigma: { action: diagnose, tools: "Read,Grep,Bash(gh run view *)" }   # read-only, writes intent.md
+  3sigma: { action: propose, routes: [pull_request, "runbook:rollback-deploy"] }  # never past the review gate

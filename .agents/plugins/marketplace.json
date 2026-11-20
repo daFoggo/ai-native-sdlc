@@ -1,0 +1,21 @@
+{
+  "name": "ai-native-sdlc",
+  "interface": {
+    "displayName": "AI-native SDLC"
+  },
+  "plugins": [
+    {
+      "name": "sdlc",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/daFoggo/ai-native-sdlc.git",
+        "ref": "main"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

@@ -2,6 +2,11 @@
   "name": "ai-native-sdlc",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22.5" },
-  "scripts": { "test": "node --test hooks/*.test.mjs skills/sdlc/scripts/*.test.mjs" }
+  "engines": {
+    "node": ">=22.5"
+  },
+  "scripts": {
+    "test": "node --test hooks/*.test.mjs skills/sdlc/scripts/*.test.mjs"
+  },
+  "version": "0.3.0"
 }

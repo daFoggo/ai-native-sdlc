@@ -1,5 +1,5 @@
 # Spec: <short name>
-Intent: <path to intent.md>. Status: draft | approved.
+Intent: <path to intent.md>. Status: draft | approved. Record: <ticket ID, or none>
 
 ## Requirements
 <Numbered, each testable. Exact values (limits, formats, copy) written verbatim.>

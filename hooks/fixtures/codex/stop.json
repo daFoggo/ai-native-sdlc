@@ -1,0 +1,11 @@
+{
+  "session_id": "01a1f738-4d41-70b2-adda-8bd4215a95fc",
+  "turn_id": "01a1f738-4eb9-7b90-8ed3-898c61a34acd",
+  "transcript_path": "__TRANSCRIPT__",
+  "cwd": "__CWD__",
+  "hook_event_name": "Stop",
+  "model": "gpt-6.2-sol",
+  "permission_mode": "bypassPermissions",
+  "stop_hook_active": false,
+  "last_assistant_message": "`cat src/a.ts` output after the update:\n\n```ts\nexport const a = 2\n```"
+}

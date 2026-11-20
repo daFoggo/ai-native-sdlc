@@ -1,0 +1,15 @@
+{
+  "session_id": "01a1f738-4d41-70b2-adda-8bd4215a95fc",
+  "turn_id": "01a1f738-4eb9-7b90-8ed3-898c61a34acd",
+  "transcript_path": "__TRANSCRIPT__",
+  "cwd": "__CWD__",
+  "hook_event_name": "PostToolUse",
+  "model": "gpt-6.2-sol",
+  "permission_mode": "bypassPermissions",
+  "tool_name": "apply_patch",
+  "tool_input": {
+    "command": "*** Begin Patch\n*** Update File: src/a.ts\n@@\n-export const a = 1\n+export const a = 2\n*** End Patch"
+  },
+  "tool_response": "Exit code: 0\nWall time: 0.2 seconds\nOutput:\nSuccess. Updated the following files:\nM src/a.ts\n",
+  "tool_use_id": "exec-241e9044-d679-4bcd-bc8c-b547f03448fc"
+}

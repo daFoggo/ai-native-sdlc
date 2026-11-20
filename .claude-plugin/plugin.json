@@ -1,8 +1,15 @@
 {
   "name": "sdlc",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "AI-native SDLC: lanes from intent to merge, a review loop capped at three rounds, and hooks that enforce each project's own checks.",
-  "author": { "name": "daFoggo", "url": "https://github.com/daFoggo" },
+  "author": {
+    "name": "daFoggo",
+    "url": "https://github.com/daFoggo"
+  },
   "repository": "https://github.com/daFoggo/ai-native-sdlc",
-  "license": "MIT"
+  "license": "MIT",
+  "hooks": "./hooks/claude-codex.json",
+  "agents": [
+    "./claude/agents/reviewer.md"
+  ]
 }

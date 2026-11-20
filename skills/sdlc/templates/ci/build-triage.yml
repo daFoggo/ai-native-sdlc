@@ -1,0 +1,11 @@
+# Read-only judgment step for an existing CI job (playbook, Stage 5): add as the job's last step. The agent
+# reads the log and writes a summary; it has no write access and no production credentials.
+      - name: Triage failed build
+        if: failure()
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          npm install -g @anthropic-ai/claude-code
+          claude -p "Read the failed steps' output in this job's log (gh run view ${{ github.run_id }} --log-failed).
+            Name the most likely cause, say whether it looks flaky or real, and write a three-line summary." \
+            --allowedTools "Bash(gh run view *)" >> "$GITHUB_STEP_SUMMARY"

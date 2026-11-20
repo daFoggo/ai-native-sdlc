@@ -1,28 +1,31 @@
 import assert from "node:assert/strict"
 import { execFileSync, spawnSync } from "node:child_process"
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { test } from "node:test"
 import { fileURLToPath } from "node:url"
 
-import { check, guard, start, verify } from "./sdlc.mjs"
+import { HOSTS, check, findSecret, guard, hostOf, normalize, start, verify } from "./sdlc.mjs"
 
 const SCRIPT = fileURLToPath(new URL("./sdlc.mjs", import.meta.url))
 
-function repo(config) {
+function repo(config, dir = ".claude") {
   const root = mkdtempSync(join(tmpdir(), "sdlc-test-"))
-  mkdirSync(join(root, ".claude"))
-  writeFileSync(join(root, ".claude", "sdlc.json"), JSON.stringify(config))
+  mkdirSync(join(root, dir))
+  writeFileSync(join(root, dir, "sdlc.json"), JSON.stringify(config))
   execFileSync("git", ["init", "-q"], { cwd: root })
   return root
 }
 
-const edit = (root, rel) => ({ tool_name: "Edit", tool_input: { file_path: join(root, rel) }, cwd: root })
+const edit = (root, rel, extra = {}) => ({ tool_name: "Edit", tool_input: { file_path: join(root, rel), ...extra }, cwd: root })
+const reason = (g) => g?.reason ?? null
+const fixture = (name, cwd) =>
+  JSON.parse(readFileSync(new URL(`./fixtures/codex/${name}`, import.meta.url), "utf8").replaceAll("__CWD__", cwd))
 
 test("guard denies protected paths and allows the rest", () => {
   const root = repo({ protect: [{ glob: "vendor/**", reason: "vendored" }] })
-  assert.match(guard(edit(root, "vendor/a.ts")), /protected: vendored/)
+  assert.match(reason(guard(edit(root, "vendor/a.ts"))), /protected: vendored/)
   assert.equal(guard(edit(root, "src/a.ts")), null)
 })
 
@@ -34,7 +37,7 @@ test("guard does nothing outside an opted-in repo", () => {
 
 test("guard bans shell commands, also from a parent folder of several repos", () => {
   const root = repo({ denyBash: [{ pattern: "shadcn(@\\S+)? add https://hairlineui", reason: "use pnpm hairline" }] })
-  const bash = (cwd) => guard({ tool_name: "Bash", tool_input: { command: "cd x && pnpm dlx shadcn@latest add https://hairlineui.com/r/a" }, cwd })
+  const bash = (cwd) => reason(guard({ tool_name: "Bash", tool_input: { command: "cd x && pnpm dlx shadcn@latest add https://hairlineui.com/r/a" }, cwd }))
   assert.match(bash(root), /use pnpm hairline/)
   assert.match(bash(join(root, "..")), /use pnpm hairline/)
   assert.equal(guard({ tool_name: "Bash", tool_input: { command: "pnpm check" }, cwd: root }), null)
@@ -45,7 +48,7 @@ test("fix mode makes tests read-only until it is switched off", () => {
   const fix = (arg) => execFileSync("node", [SCRIPT, "fix", arg], { cwd: root, encoding: "utf8" })
   assert.equal(guard(edit(root, "src/a.test.ts")), null)
   fix("on")
-  assert.match(guard(edit(root, "src/a.test.ts")), /Fix mode/)
+  assert.match(reason(guard(edit(root, "src/a.test.ts"))), /Fix mode/)
   assert.equal(guard(edit(root, "src/a.ts")), null)
   fix("off")
   assert.equal(guard(edit(root, "src/a.test.ts")), null)
@@ -134,4 +137,79 @@ test("bash: files a shell command changed get the same check, and fix mode repor
   execFileSync("node", [SCRIPT, "fix", "on"], { cwd: root })
   assert.match(runBash("echo ok > x.test.ts"), /Fix mode: this command changed tests \(x\.test\.ts\)/)
   assert.equal(hook("bash", "true"), "") // no mark: nothing to do
+})
+
+test("config and rule cards may live in .agents/ instead of .claude/", () => {
+  const root = repo({ protect: [{ glob: "gen/**", reason: "generated" }] }, ".agents")
+  assert.match(reason(guard(edit(root, "gen/a.ts"))), /generated/)
+  assert.match(start({ cwd: root }), /sdlc/)
+})
+
+test("Codex apply_patch: guard reads the paths inside the patch, check runs on them (real payloads)", () => {
+  const root = repo({ protect: [{ glob: "src/**", reason: "frozen" }], check: [{ glob: "**/*.ts", run: "! grep -q 2 {file}" }] })
+  const pre = fixture("pre-apply-patch.json", root)
+  assert.deepEqual(normalize(pre).files, [join(root, "src/a.ts")])
+  assert.equal(hostOf(pre), "codex")
+  assert.match(reason(guard(pre)), /src\/a\.ts is protected: frozen/)
+  mkdirSync(join(root, "src"))
+  writeFileSync(join(root, "src/a.ts"), "export const a = 2\n")
+  assert.match(check(fixture("post-apply-patch.json", root)), /check failed on src\/a\.ts/)
+  assert.equal(normalize(fixture("pre-bash.json", root)).command, "cat src/a.ts")
+  assert.equal(hostOf(edit(root, "x.ts")), "claude")
+  assert.deepEqual(normalize({ tool_name: "read_file", tool_input: { file_path: join(root, "src/a.ts") }, cwd: root }).files, [])
+})
+
+test("secrets: an edit that writes a key into a tracked file is denied; a gitignored file is fine", () => {
+  const root = repo({})
+  const key = "AKIA" + "ABCDEFGHIJKLMNOP"
+  assert.equal(findSecret(`const k = "${key}"`), "an AWS access key")
+  assert.equal(findSecret("const k = process.env.KEY"), null)
+  assert.match(reason(guard(edit(root, "src/a.ts", { new_string: `k = "${key}"` }))), /AWS access key into src\/a\.ts/)
+  const multi = { tool_name: "MultiEdit", tool_input: { file_path: join(root, "a.ts"), edits: [{ old_string: "x", new_string: `k="${key}"` }] }, cwd: root }
+  assert.match(reason(guard(multi)), /AWS access key/)
+  assert.equal(guard(edit(root, "src/a.ts", { old_string: `k = "${key}"`, new_string: "k = process.env.K" })), null) // removing one is fine
+  writeFileSync(join(root, ".gitignore"), ".env\n")
+  assert.equal(guard({ tool_name: "Write", tool_input: { file_path: join(root, ".env"), content: `K=${key}` }, cwd: root }), null)
+})
+
+test("approve gates ask instead of deny; Codex, which cannot ask from a hook, denies with the route", () => {
+  const root = repo({ approve: [{ glob: "db/migrations/**", reason: "migrations need a change ticket" }, { pattern: "deploy.*prod", reason: "release manager signs off" }] })
+  assert.deepEqual(guard(edit(root, "db/migrations/1.sql")), { decision: "ask", reason: "Needs approval (sdlc.json): migrations need a change ticket" })
+  assert.equal(guard({ tool_name: "Bash", tool_input: { command: "make deploy env=prod" }, cwd: root }).decision, "ask")
+  const out = HOSTS.codex.guard({ decision: "ask", reason: "x" }).json.hookSpecificOutput
+  assert.equal(out.permissionDecision, "deny")
+  assert.match(out.permissionDecisionReason, /Ask the user/)
+})
+
+test("hosts without path-scoped rules get each matching rule card once per session", () => {
+  const root = repo({})
+  mkdirSync(join(root, ".claude", "rules"), { recursive: true })
+  writeFileSync(join(root, ".claude/rules/ui.md"), "---\npaths: [\"ui/**\"]\n---\nWeights 400 and 500 only.")
+  mkdirSync(join(root, "ui"))
+  writeFileSync(join(root, "ui/a.tsx"), "x")
+  const input = { ...edit(root, "ui/a.tsx"), session_id: `r${process.pid}${Date.now()}` }
+  assert.match(check(input, { rules: true }), /Project rules for ui\/a\.tsx:\n---[\s\S]*Weights 400/)
+  assert.equal(check(input, { rules: true }), null) // already seen this session
+  assert.equal(check({ ...input, session_id: "other" }), null) // Claude loads them natively
+})
+
+test("every host adapter answers each mode in its own format", () => {
+  assert.deepEqual(HOSTS.gemini.guard({ decision: "deny", reason: "r" }).json, { decision: "deny", reason: "r" })
+  assert.equal(HOSTS.gemini.context("m").json.hookSpecificOutput.hookEventName, "AfterTool")
+  assert.deepEqual(HOSTS.gemini.block("m").json, { decision: "deny", reason: "m" })
+  assert.equal(HOSTS.antigravity.start("m").json.injectSteps[0].systemMessage.systemMessage, "m")
+  assert.deepEqual(HOSTS.antigravity.block("m").json, { decision: "continue", reason: "m" })
+  assert.equal(HOSTS.antigravity.context("m"), null)
+  assert.equal(HOSTS.claude.block("m").exit, 2)
+  for (const h of Object.values(HOSTS)) for (const k of ["start", "guard", "context", "block", "warn"]) assert.equal(typeof h[k], "function")
+})
+
+test("hook output for Codex: Stop blocks with exit 2 from the real payload", () => {
+  const root = repo({ verify: "exit 1" })
+  writeFileSync(join(root, "a.ts"), "")
+  const env = { ...process.env }
+  delete env.CLAUDE_PROJECT_DIR
+  const v = spawnSync("node", [SCRIPT, "verify"], { input: JSON.stringify({ ...fixture("stop.json", root), session_id: `c${process.pid}${Date.now()}` }), encoding: "utf8", env })
+  assert.equal(v.status, 2)
+  assert.match(v.stderr, /verify failed/)
 })

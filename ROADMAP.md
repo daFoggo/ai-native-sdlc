@@ -38,6 +38,26 @@ Open work after the first pilot (2026-11-20, wattprint-web). Most important firs
       sessions and `claude plugin eval` wait for it. Check whether headless use (CI) needs a foreground reviewer.
 - [x] Plugin icon.
 
+## Other agent hosts (0.3.0)
+
+- [x] One hooks script with per-host output (`HOSTS`), one skills folder, one reviewer prompt; manifests for Codex,
+      Antigravity and Gemini CLI. Codex payloads captured from a real run (`hooks/fixtures/codex/`).
+- [ ] Codex end to end: install from GitHub, trust the hooks, run the `b3-docs-missed` task with and without.
+      Known: `codex exec` needs `--trust` (project config) and `--dangerously-bypass-hook-trust` (unreviewed hooks).
+- [ ] Antigravity end to end (needs `agy` signed in): capture its payloads, confirm the tool names in `EDIT_TOOLS`,
+      the plugin root variable in `hooks.json`, and whether `PostInvocation` can carry check failures back.
+- [ ] Gemini CLI end to end (not installed here): the hooks template and `${extensionPath}`-free paths.
+- [ ] Codex custom agent (`.codex/agents/reviewer.toml` with `model`) written by `sdlc-init`, if the generic
+      subagent reviews worse than the Claude agent on `e-reviewer`.
+
+## Playbook coverage still open
+
+- [x] Secrets kept out of the diff (guard), approval gates (`approve` → ask), record-ID linkage in templates, the
+      "second mistake goes into CLAUDE.md/AGENTS.md" rule, CI templates, `bands.yaml`, git metrics.
+- [ ] A hook that keeps `plan.md` in step with the diff (the playbook suggests one; today it is an instruction).
+- [ ] A verifier subagent that runs the app and checks behavior against `plan.md` before done.
+- [ ] Spec generation triggered by an accepted `intent.md` (a CI job on merge), and the managed-settings example.
+
 ## Rollout
 
 - [ ] Onboard wattprint-text2sql-mcp, then wattprint-backend once its developer agrees, with `sdlc-init`.

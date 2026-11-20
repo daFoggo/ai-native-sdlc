@@ -1,0 +1,34 @@
+{
+  "name": "sdlc",
+  "version": "0.3.0",
+  "description": "AI-native SDLC: lanes from intent to merge, a review loop capped at three rounds, and hooks that enforce each project's own checks.",
+  "author": {
+    "name": "daFoggo",
+    "url": "https://github.com/daFoggo"
+  },
+  "homepage": "https://github.com/daFoggo/ai-native-sdlc",
+  "repository": "https://github.com/daFoggo/ai-native-sdlc",
+  "license": "MIT",
+  "keywords": [
+    "sdlc",
+    "code-review",
+    "hooks",
+    "quality"
+  ],
+  "skills": "./skills/",
+  "hooks": "./hooks/claude-codex.json",
+  "interface": {
+    "displayName": "sdlc",
+    "shortDescription": "AI-native SDLC: lanes, a capped review loop, enforced project checks",
+    "longDescription": "Runs the AI-Native SDLC Playbook in any repo: pick a lane, write intent/spec/plan when it pays, lint every edit, verify before finishing, and review in at most three rounds.",
+    "developerName": "daFoggo",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Instructions",
+      "Lifecycle hooks"
+    ],
+    "websiteURL": "https://github.com/daFoggo/ai-native-sdlc",
+    "logo": "./assets/icon.png",
+    "composerIcon": "./assets/icon.png"
+  }
+}
