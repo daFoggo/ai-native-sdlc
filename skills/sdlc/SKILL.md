@@ -75,8 +75,9 @@ not, new files included) and the rule cards that bind it.
 2. Sort the findings yourself: **Must fix** and **Should fix** enter ONE fix pass, all together; each fix gets a
    test that failed first. **Minor** goes to the debt list, never into the loop. A finding you reject is a
    ruling: `Ruling: <finding> — <why> — <cost if wrong>`.
-3. **R2, scoped.** A new package from the same `<base>`; dispatch with `mode: scoped` and the open findings only.
-4. Still open after R2: one more fix pass, then **R3, scoped**, the last one.
+3. **R2, scoped.** Package the fix only: `review-package.mjs <base> --since <snapshot>`, where `<snapshot>` is the
+   `Snapshot:` line of the R1 package. Dispatch with `mode: scoped`, that package and the open findings only.
+4. Still open after R2: one more fix pass, then **R3, scoped**, the last one, packaged `--since` the R2 snapshot.
 5. Anything open after R3 stops the loop: hand it to the user with your rulings. A fourth round does not
    converge; the problem is in the plan or the spec.
 

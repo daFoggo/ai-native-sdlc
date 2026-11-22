@@ -55,7 +55,7 @@ have new names, a line in `EDIT_TOOLS`/`SHELL_TOOLS`. Capture a real payload wit
 | `hooks/sdlc.mjs` | `start` (points the agent at the skill in opted-in repos), `guard` (protected paths, banned commands, secrets in new content, read-only tests in fix mode, `approve` gates), `check` (per-file check after each edit), `bash` (after a shell command, subagent or MCP tool: the same check on the files it wrote, plus protected and test paths it changed, moved, deleted or committed (its own commits, not those a merge, pull or checkout brings in); a shell command cannot be inspected beforehand, so this reports after the fact and the agent restores the file), `verify` (on Stop). One script; `HOSTS` adapts its output to each agent |
 | `skills/sdlc/scripts/metrics.mjs` | The playbook's indicators from git: intent → spec → plan times, spec rework after the plan, agent-instruction and rule-card changes, debt added |
 | `skills/sdlc/templates/ci/`, `maintain/` | The playbook's CI jobs (PR review with claude-code-action, continuous agent evals, build triage) and the closing-the-loop `bands.yaml` |
-| `skills/sdlc/scripts/review-package.mjs` | One file per review: commits, stat, the rule cards that bind the changed files, and the diff |
+| `skills/sdlc/scripts/review-package.mjs` | One file per review: commits, stat, the rule cards that bind the changed files, and the diff (5 lines of context; lockfiles and other huge diffs listed, not inlined). `--since <snapshot>` packages only the fix for a scoped R2/R3 |
 
 ## `sdlc.json` (`.agents/` or `.claude/`)
 

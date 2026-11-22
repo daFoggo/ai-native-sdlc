@@ -1,14 +1,20 @@
 #!/usr/bin/env node
-// Writes one file a reviewer reads instead of running git itself: the commits, the stat, the diff with context,
-// and the project rule cards whose `paths:` match a changed file, so a reviewer on any agent host gets them.
-//   node review-package.mjs <base> [head]     run inside the repo; prints the file path. Without head: base to
-//                                             the working tree, uncommitted and untracked files included
+// Writes one file a reviewer reads instead of running git itself: the commits, the stat, the diff, and the project
+// rule cards whose `paths:` match a changed file, so a reviewer on any agent host gets them.
+//   node review-package.mjs <base> [head]              run inside the repo; prints the file path. Without head: base
+//                                                      to the working tree, uncommitted and untracked files included
+//   node review-package.mjs <base> --since <snapshot>  the fix only: what changed since the snapshot an earlier
+//                                                      package printed (scoped R2/R3), so a re-review never re-reads
+//                                                      the whole change
 
-import { execFileSync, spawnSync } from "node:child_process"
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
+import { execFileSync } from "node:child_process"
+import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join, matchesGlob } from "node:path"
 import { fileURLToPath } from "node:url"
+
+const CONTEXT = "-U5" // the reviewer reads the files for more; wider context is paid again on every round
+const MAX_FILE_LINES = 800 // a lockfile or generated file this big is listed, not inlined
 
 /** The `paths:` globs of a rule file's frontmatter: a YAML block list, a flow list `[a, b]`, or `a, b`. */
 export function rulePaths(text) {
@@ -36,31 +42,60 @@ export function matchingRules(root, files) {
   return out
 }
 
+/** A commit of the working tree as it is now (untracked files included), made in a scratch index: the real index,
+ *  HEAD and files are untouched. It is unreachable, so git's gc drops it after the usual grace period. */
+function snapshot(git, root) {
+  const index = join(tmpdir(), `sdlc-index-${process.pid}-${Date.now()}`)
+  const env = { ...process.env, GIT_INDEX_FILE: index }
+  try {
+    git({ env }, "read-tree", "HEAD")
+    git({ env, stdio: ["ignore", "pipe", "ignore"] }, "add", "-A", "--", ".") // line-ending warnings are noise the agent pays for
+    const tree = git({ env }, "write-tree").trim()
+    return git({}, "commit-tree", tree, "-p", "HEAD", "-m", "sdlc review snapshot").trim()
+  } finally {
+    rmSync(index, { force: true })
+  }
+}
+
 function main() {
-  // With a head: that commit range. Without: everything since base, committed or not, untracked files included,
-  // because the sdlc loop reviews work before the user has asked for a commit.
-  const [base, head] = process.argv.slice(2)
-  if (!base) throw new Error("usage: review-package.mjs <base> [head]")
-  const git = (...a) => execFileSync("git", a, { encoding: "utf8", maxBuffer: 256 << 20 })
-  const root = git("rev-parse", "--show-toplevel").trim()
-  const range = head ? `${base}..${head}` : base
-  const untracked = head ? [] : git("ls-files", "--others", "--exclude-standard").split("\n").filter(Boolean)
-  // `git diff --no-index` exits 1 when files differ, which is the point here.
-  const newFileDiff = (f) => spawnSync("git", ["diff", "--no-index", "-U10", "/dev/null", f], { cwd: root, encoding: "utf8" }).stdout
-  const files = [...git("diff", "--name-only", range).split("\n").filter(Boolean), ...untracked]
+  const args = process.argv.slice(2)
+  const at = args.indexOf("--since")
+  const since = at >= 0 ? args.splice(at, 2)[1] : null
+  const [base, head] = args
+  if (!base || (at >= 0 && !since)) throw new Error("usage: review-package.mjs <base> [head] | <base> --since <snapshot>")
+  const git = (opts, ...a) =>
+    execFileSync("git", ["-c", "user.name=sdlc", "-c", "user.email=sdlc@localhost", ...a], { encoding: "utf8", maxBuffer: 256 << 20, ...opts })
+  const root = git({}, "rev-parse", "--show-toplevel").trim()
+  const run = (...a) => git({ cwd: root }, ...a)
+  // Always a commit: the working tree becomes one, so new files need no special case and the next round can diff from it.
+  const to = head ?? snapshot((o, ...a) => git({ cwd: root, ...o }, ...a), root)
+  const from = since ?? base
+  const range = `${from}..${to}`
+
+  const files = run("diff", "--name-only", range).split("\n").filter(Boolean)
+  const big = run("diff", "--numstat", range)
+    .split("\n")
+    .map((l) => l.split("\t"))
+    .filter(([a, d, f]) => f && (a === "-" || Number(a) + Number(d) > MAX_FILE_LINES))
+    .map(([, , f]) => f)
   const rules = matchingRules(root, files)
   const review = existsSync(join(root, "REVIEW.md")) ? "REVIEW.md (read it first)" : "none (no REVIEW.md)"
+  const diff = run("diff", CONTEXT, range, "--", ".", ...big.map((f) => `:(exclude,literal)${f}`))
   const parts = [
-    `# Review package ${head ? range : `${base}..working tree`}`,
-    `Repo: ${root}\nReview policy: ${review}\nRules that bind these files: ${rules.map((r) => r.name).join(", ") || "none"}`,
-    `## Commits\n${git("log", "--oneline", `${base}..${head ?? "HEAD"}`) || "(none yet; the work is uncommitted)"}`,
-    `## Stat\n${git("diff", "--stat", range)}${untracked.map((f) => ` ${f} (new, untracked)`).join("\n")}`,
+    `# Review package ${since ? `fix since ${since.slice(0, 9)}` : head ? range : `${base.slice(0, 9)}..working tree`}`,
+    `Repo: ${root}\nSnapshot: ${to} (for the next round: review-package.mjs ${base} --since ${to})\n` +
+      `Review policy: ${review}\nRules that bind these files: ${rules.map((r) => r.name).join(", ") || "none"}`,
+    since
+      ? "Scope: the fix only. The rest of the change was reviewed in an earlier round; read a file when the fix needs its context."
+      : `## Commits\n${run("log", "--oneline", `${base}..${head ?? "HEAD"}`) || "(none yet; the work is uncommitted)"}`,
+    `## Stat\n${run("diff", "--stat", range)}`,
+    big.length ? `## Not inlined (binary or over ${MAX_FILE_LINES} changed lines; read them if they matter)\n${big.join("\n")}` : "",
     ...rules.map((r) => `## Rule: ${r.name}\n${r.text}`),
-    `## Diff\n${git("diff", "-U10", range)}${untracked.map(newFileDiff).join("")}`,
+    `## Diff\n${diff || "(no changes)"}`,
   ]
-  const short = (r) => git("rev-parse", "--short", r).trim()
-  const out = join(tmpdir(), `sdlc-review-${short(base)}-${head ? short(head) : `wt${Date.now()}`}.md`)
-  writeFileSync(out, parts.join("\n\n"))
+  const short = (r) => run("rev-parse", "--short", r).trim()
+  const out = join(tmpdir(), `sdlc-review-${short(from)}-${short(to)}.md`)
+  writeFileSync(out, parts.filter(Boolean).join("\n\n"))
   console.log(out)
 }
 

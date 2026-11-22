@@ -41,3 +41,37 @@ test("R1-1: the package includes uncommitted and untracked work when no head is 
   assert.match(pkg, /\+export const b = 1/)
   assert.match(pkg, /working tree/)
 })
+
+test("--since packages only the fix made after an earlier round, and leaves the index alone", () => {
+  const root = mkdtempSync(join(tmpdir(), "sdlc-pkg-"))
+  const git = (...a) => execFileSync("git", ["-c", "user.email=e@x", "-c", "user.name=e", ...a], { cwd: root, encoding: "utf8" })
+  const pkg = (...a) => readFileSync(execFileSync("node", [SCRIPT, ...a], { cwd: root, encoding: "utf8" }).trim(), "utf8")
+  git("init", "-q")
+  writeFileSync(join(root, "a.ts"), "export const a = 1\n")
+  git("add", "-A"); git("commit", "-qm", "init")
+  const base = git("rev-parse", "HEAD").trim()
+  writeFileSync(join(root, "a.ts"), "export const a = 2\n")
+  writeFileSync(join(root, "b.ts"), "export const b = 1\n")
+  const r1 = pkg(base)
+  const snap = r1.match(/^Snapshot: ([0-9a-f]{40})/m)[1]
+  writeFileSync(join(root, "b.ts"), "export const b = 3\n") // the fix
+  const r2 = pkg(base, "--since", snap)
+  assert.match(r2, /\+export const b = 3/)
+  assert.doesNotMatch(r2, /export const a = 2/) // reviewed in R1, not re-read
+  assert.equal(git("status", "--porcelain"), " M a.ts\n?? b.ts\n") // nothing staged by the snapshots
+})
+
+test("a file with a huge diff is listed, not inlined", () => {
+  const root = mkdtempSync(join(tmpdir(), "sdlc-pkg-"))
+  const git = (...a) => execFileSync("git", ["-c", "user.email=e@x", "-c", "user.name=e", ...a], { cwd: root, encoding: "utf8" })
+  git("init", "-q")
+  writeFileSync(join(root, "a.ts"), "export const a = 1\n")
+  git("add", "-A"); git("commit", "-qm", "init")
+  const base = git("rev-parse", "HEAD").trim()
+  writeFileSync(join(root, "lock.json"), "x\n".repeat(2000))
+  writeFileSync(join(root, "a.ts"), "export const a = 2\n")
+  const p = readFileSync(execFileSync("node", [SCRIPT, base], { cwd: root, encoding: "utf8" }).trim(), "utf8")
+  assert.match(p, /Not inlined[^\n]*\nlock\.json/)
+  assert.match(p, /\+export const a = 2/)
+  assert.doesNotMatch(p.split("## Diff")[1], /lock\.json/)
+})
