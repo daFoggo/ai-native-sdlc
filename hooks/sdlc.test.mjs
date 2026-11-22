@@ -426,3 +426,30 @@ test("R3-2: commits brought in by merge, pull or checkout are not blamed on the 
   assert.doesNotMatch(shell(`${git} merge -q --no-edit up`), /protected/) // merge commit made now
   assert.match(shell(`echo mine > vendor/x.ts && ${git} commit -qam own`), /vendor\/x\.ts is protected/) // own commit still caught
 })
+
+test("subagent-driven-development is refused unless sdlc.json names it as build", () => {
+  const skill = (cwd) => guard({ tool_name: "Skill", tool_input: { skill: "superpowers:subagent-driven-development" }, cwd })
+  assert.equal(skill(repo({})).decision, "deny")
+  assert.equal(skill(repo({ providers: { build: "superpowers:subagent-driven-development" } })), null)
+  assert.equal(guard({ tool_name: "Skill", tool_input: { skill: "superpowers:writing-plans" }, cwd: repo({}) }), null)
+  assert.equal(skill(mkdtempSync(join(tmpdir(), "sdlc-none-"))), null) // no sdlc.json: not ours to judge
+})
+
+test("a subagent's model comes from sdlc.json, and the reviewer never runs on haiku", () => {
+  const agent = (cwd, ti) => guard({ tool_name: "Agent", tool_input: { prompt: "p", description: "d", ...ti }, cwd })
+  const root = repo({ models: { implementer: "sonnet" } })
+  const g = agent(root, { subagent_type: "implementer", model: "opus" })
+  assert.equal(g.decision, "allow")
+  assert.deepEqual(g.updatedInput, { prompt: "p", description: "d", subagent_type: "implementer", model: "sonnet" })
+  assert.equal(agent(root, { subagent_type: "implementer", model: "sonnet" }), null) // already right
+  assert.equal(agent(root, { subagent_type: "scout" }), null) // not in the map
+  assert.equal(agent(root, { subagent_type: "sdlc:reviewer", model: "haiku" }).updatedInput.model, "sonnet")
+  assert.equal(agent(root, { subagent_type: "sdlc:reviewer", model: "opus" }), null)
+  const out = spawnSync("node", [SCRIPT, "guard"], {
+    input: JSON.stringify({ tool_name: "Agent", tool_input: { prompt: "p", subagent_type: "implementer" }, cwd: root }),
+    encoding: "utf8",
+  })
+  const h = JSON.parse(out.stdout).hookSpecificOutput
+  assert.equal(h.permissionDecision, "allow")
+  assert.deepEqual(h.updatedInput, { prompt: "p", subagent_type: "implementer", model: "sonnet" })
+})

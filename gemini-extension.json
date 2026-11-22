@@ -1,6 +1,6 @@
 {
   "name": "sdlc",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "description": "AI-native SDLC: lanes from intent to merge, a review loop capped at three rounds, and hooks that enforce each project's own checks.",
   "contextFileName": "GEMINI.md"
 }

@@ -62,9 +62,11 @@ breached metric: write `intent.md` with `Source:` naming it and the evidence, th
 ## 3. The review loop (lanes M and L): at most three reviews
 
 The reviewer (role `review`) is always a fresh context. Its model follows the reasoning the round needs:
-- R1 on lane L (several modules, `riskyPaths`): the most capable model. On Claude Code pass `model: opus`.
-- R1 on lane M, and scoped R2/R3 (checking named findings): a mid-tier model (`sonnet`, the agent's default).
+- R1 on lane L (several modules, `riskyPaths`): the most capable model (`opus`, the agent's default).
+- R1 on lane M, and scoped R2/R3 (checking named findings): a mid-tier model. On Claude Code pass `model: sonnet`.
   Never the cheapest tier; it misses defects.
+The default is the capable model so that a forgotten `model` costs a little on a small diff instead of missing a
+defect in risky code.
 On Claude Code it is the `sdlc:reviewer` agent. Elsewhere, start a fresh subagent whose instructions are
 [references/reviewer.md](references/reviewer.md), on the model the list above names, told to change nothing;
 a host with no subagents gets the same file in a new session. Package the change first:
@@ -119,7 +121,8 @@ and save what it produces in the artifact's place (its design doc becomes `spec.
 sdlc rules above still bind it: the lanes, the test policy, the review cap. A provider that asks the user
 questions one by one (brainstorming) is the one exception when the user said up front they will not answer:
 then write intent and spec inline and say so. The exception covers only that provider; plan and build still go
-through theirs (`writing-plans`, `executing-plans` ask nothing).
+through theirs. `writing-plans` ends by asking how to execute: the answer is this repo's `build` role (inline
+unless sdlc.json names another), never a choice put to the user again.
 Override any of these in `sdlc.json` → `"providers": { "<role>": "<skill or 'inline'>" }`. If the named
 skill is not installed, do the role inline with the template and say so in one line.
 
@@ -135,8 +138,10 @@ skill is not installed, do the role inline with the template and say so in one l
 | debug | `superpowers:systematic-debugging` | reproduce → failing test → root cause → fix |
 
 A provider's own artifact paths and loop limits yield to this skill: artifacts go where section 1 says, and its
-review rounds count toward the three above (in superpowers' subagent-driven mode, set its per-task fix rounds to
-one and keep only the final review here). Build defaults to inline because `superpowers:executing-plans` ends with
+review rounds count toward the three above. `superpowers:subagent-driven-development` runs only when sdlc.json
+names it as `build` (the hook refuses it otherwise): a fresh implementer per task re-reads the code and pays the
+session's whole startup context again, which measured at two to three times the cost of the main session; when
+it is named, set its per-task fix rounds to one and keep only the final review here. Build defaults to inline because `superpowers:executing-plans` ends with
 its own review, a commit and a workspace cleanup; a repo that sets it as `build` skips that final section, since
 section 3 is the review. Committing stays the user's call: the artifacts and tests go into the change's commits
 when the user asks for them.

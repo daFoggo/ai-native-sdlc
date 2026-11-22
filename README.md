@@ -22,7 +22,12 @@ Agents miss a project's standards for three reasons, and each has a mechanical f
 Review is capped at three rounds (one full review, then at most two reviews of the fix only). Superpowers' own
 measurements found that unbounded loops are the biggest source of cost variance, that re-reviewing the whole diff
 each round keeps producing new findings instead of converging, and that cheap reviewer models miss planted
-defects. So the reviewer runs on the most capable model, once, and re-reviews look only at the fix.
+defects. So the first review of a large or risky change runs on the most capable model (the reviewer agent's
+default), the first review of a change inside one area and the re-reviews on a mid-tier model, never the cheapest,
+and re-reviews look only at the fix.
+
+The plugin cannot pick the main session's model, which does most of the work (plan, code, reading). A mid-tier
+model is enough for most sessions; switch to the most capable one for lane L design.
 
 ## Install
 
@@ -68,9 +73,15 @@ have new names, a line in `EDIT_TOOLS`/`SHELL_TOOLS`. Capture a real payload wit
   "approve": [{ "glob": "db/migrations/**", "reason": "migrations need a change ticket from the DBA" }],
   "tests": ["**/*.test.{ts,tsx}"],
   "riskyPaths": ["**/auth/**"],
-  "providers": { "style": "ponytail:ponytail" }
+  "providers": { "style": "ponytail:ponytail" },
+  "models": { "implementer": "sonnet", "planner": "sonnet" }
 }
 ```
+
+`models` maps a subagent type to the model it runs on. On Claude Code the guard hook rewrites every `Agent` call
+that names that type, so the choice holds on every machine instead of depending on the agent passing `model`.
+Without a map, only one floor applies: `sdlc:reviewer` never runs on `haiku`. The same hook refuses
+`superpowers:subagent-driven-development` unless `providers.build` names it.
 
 `sdlc.local.json` beside it (gitignored) overrides it per machine, for example `"pathPrepend": ["~/.local/node/bin"]`.
 In a folder that holds several repos, the Stop hook verifies each child repo that has its own `sdlc.json`. Secret

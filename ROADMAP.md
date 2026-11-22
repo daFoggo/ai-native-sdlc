@@ -30,8 +30,9 @@ Open work after the first pilot (2026-11-20, wattprint-web). Most important firs
 - [x] Fix mode protected tests only from Edit/Write (0.1.1: a test changed through Bash is reported after the
       command, not prevented).
 - [x] Path-scoped rules load in subagents (`integrations.sh rules`).
-- [ ] Superpowers' subagent-driven mode allows five fix rounds per task; the cap of three is only an instruction in
-      the `sdlc` skill. Test with superpowers installed, or prefer `executing-plans` in the provider table.
+- [x] Superpowers' subagent-driven mode allows five fix rounds per task; the cap of three was only an instruction in
+      the `sdlc` skill (0.4.5: the guard hook refuses that skill unless `providers.build` names it).
+- [ ] Run `e-reviewer` with the reviewer on `sonnet` to back lane M's R1 on the mid tier with numbers.
 - [x] Providers tested with superpowers 7.0.2 and hallmark 2.0.0 installed (`integrations.sh`). Found and fixed: lane M
       skipped review as "too small", and installed providers were never invoked (0.2.0).
 - [ ] In `claude -p`, the reviewer runs in the background and the session ends before its findings arrive; interactive

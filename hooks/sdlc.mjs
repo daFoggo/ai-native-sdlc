@@ -139,9 +139,34 @@ const newContent = (ti) =>
 
 // ---- guard -----------------------------------------------------------------------------------
 
-/** {decision: "deny" | "ask", reason} or null. */
+const SDD = /(^|:)subagent-driven-development$/
+
+/** Claude's Skill and Agent calls: the build role and the model of each subagent come from sdlc.json, not from
+ *  what the agent remembers. {decision, reason, updatedInput?} or null. */
+function guardDispatch(e) {
+  const configs = rootsFor(e.cwd).map(loadConfig)
+  if (!configs.length) return null
+  if (e.tool === "Skill" && SDD.test(String(e.ti.skill ?? ""))) {
+    if (configs.some((c) => SDD.test(String(c.providers?.build ?? "")))) return null
+    return {
+      decision: "deny",
+      reason:
+        "sdlc: build is inline in this repo (providers.build in sdlc.json), so work the plan here; the review is the sdlc loop. " +
+        "A subagent per task re-reads the code and the startup context for every task.",
+    }
+  }
+  if (e.tool !== "Agent" && e.tool !== "Task") return null
+  const type = String(e.ti.subagent_type ?? "")
+  let model = configs.map((c) => c.models?.[type]).find(Boolean)
+  if (!model && type === "sdlc:reviewer" && e.ti.model === "haiku") model = "sonnet" // the cheapest tier misses defects
+  if (!model || model === e.ti.model) return null
+  return { decision: "allow", reason: `sdlc: ${type || "subagent"} runs on ${model} (sdlc.json)`, updatedInput: { ...e.ti, model } }
+}
+
+/** {decision: "deny" | "ask" | "allow", reason, updatedInput?} or null. */
 export function guard(input) {
   const e = normalize(input)
+  if (e.tool === "Skill" || e.tool === "Agent" || e.tool === "Task") return guardDispatch(e)
   if (e.shell) {
     // From a multi-repo parent folder the command may `cd` into any child repo: apply all of theirs.
     const configs = rootsFor(e.cwd).map(loadConfig)
@@ -425,7 +450,16 @@ export const HOSTS = {
   claude: {
     nativeRules: true,
     start: (m) => ({ json: { hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: m } } }),
-    guard: (g) => ({ json: { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: g.decision, permissionDecisionReason: g.reason } } }),
+    guard: (g) => ({
+      json: {
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: g.decision,
+          permissionDecisionReason: g.reason,
+          ...(g.updatedInput && { updatedInput: g.updatedInput }), // replaces the whole input, so it carries every field
+        },
+      },
+    }),
     context: (m) => ({ json: { hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: m } } }),
     block: (m) => ({ stderr: m, exit: 2 }),
     warn: (m) => ({ json: { systemMessage: m } }),
@@ -434,7 +468,10 @@ export const HOSTS = {
   codex: {
     nativeRules: false,
     start: (m) => HOSTS.claude.start(m),
-    guard: (g) => HOSTS.claude.guard({ decision: "deny", reason: g.decision === "ask" ? `${g.reason}. Ask the user, and retry only after they approve.` : g.reason }),
+    guard: (g) =>
+      g.decision === "allow"
+        ? HOSTS.claude.guard(g)
+        : HOSTS.claude.guard({ decision: "deny", reason: g.decision === "ask" ? `${g.reason}. Ask the user, and retry only after they approve.` : g.reason }),
     context: (m) => HOSTS.claude.context(m),
     block: (m) => HOSTS.claude.block(m),
     warn: (m) => HOSTS.claude.warn(m),
@@ -513,10 +550,9 @@ function main() {
   } else if (mode === "guard") {
     const g = guard(input)
     if (g) emit(host.guard(g))
-    else {
-      if (host.pass) emit(host.pass)
-      if (!normalize(input).files.length) markBash(input) // any tool that is not a file edit may still write files
-    }
+    else if (host.pass) emit(host.pass)
+    // Any tool that runs and is not a file edit may still write files (a subagent whose model was set included).
+    if ((!g || g.decision === "allow") && !normalize(input).files.length) markBash(input)
   } else if (mode === "check") {
     const msg = check(input, { rules })
     if (msg) emit(host.context(msg, session))

@@ -2,7 +2,7 @@
 name: reviewer
 description: Fresh-context code reviewer for the sdlc review loop. Give it a review package path (from the sdlc skill's review-package script), the spec and plan paths, and the mode (full, or scoped with the open findings). Read-only; returns ranked findings and a verdict.
 tools: Read, Grep, Glob, Bash
-model: sonnet
+model: opus
 ---
 
 You review one change as the senior developer who gets paged when it breaks. You did not write it, and the
