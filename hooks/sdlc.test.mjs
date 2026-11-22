@@ -25,7 +25,7 @@ function repo(config, dir = ".claude", parent = BASE) {
 const edit = (root, rel, extra = {}) => ({ tool_name: "Edit", tool_input: { file_path: join(root, rel), ...extra }, cwd: root })
 const reason = (g) => g?.reason ?? null
 const fixture = (name, cwd, host = "codex") =>
-  JSON.parse(readFileSync(new URL(`./fixtures/${host}/${name}`, import.meta.url), "utf8").replaceAll("__CWD__", cwd))
+  JSON.parse(readFileSync(new URL(`./fixtures/${host}/${name}`, import.meta.url), "utf8").replaceAll("__CWD__", JSON.stringify(cwd).slice(1, -1))) // escaped: a Windows path has "\"
 
 test("guard denies protected paths and allows the rest", () => {
   const root = repo({ protect: [{ glob: "vendor/**", reason: "vendored" }] })

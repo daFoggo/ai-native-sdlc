@@ -22,6 +22,9 @@ import { fileURLToPath } from "node:url"
 
 import { matchingRules } from "../skills/sdlc/scripts/review-package.mjs"
 
+// Paths in messages, globs and git commands use "/" on every OS (Windows' relative() gives "\").
+const posixRelative = (from, to) => relative(from, to).replaceAll("\\", "/")
+
 const MAX_BLOCKS = 3 // Stop blocks per session and repo before verify only warns: the review-loop cap.
 const CONFIG_DIRS = [".agents", ".claude"]
 
@@ -153,7 +156,7 @@ export function guard(input) {
     const root = findRoot(dirname(abs))
     if (!root) continue
     const config = loadConfig(root)
-    const rel = relative(root, abs)
+    const rel = posixRelative(root, abs)
     const p = (config.protect ?? []).find((x) => matches(rel, x.glob))
     if (p) return { decision: "deny", reason: `${rel} is protected: ${p.reason}` }
     if (existsSync(fixFlag(root)) && matches(rel, config.tests ?? []))
@@ -189,7 +192,7 @@ export function checkFile(abs, { rules = false, session = "nosession" } = {}) {
   const root = findRoot(dirname(abs))
   if (!root) return null
   const config = loadConfig(root)
-  const rel = relative(root, abs)
+  const rel = posixRelative(root, abs)
   const out = []
   if (rules) {
     const cards = matchingRules(root, [rel]).filter((r) => !seenOnce(session, `${root}:${r.name}`))
@@ -276,12 +279,12 @@ export function bashCheck(input, mark, { rules = false } = {}) {
     if (!touched.length) continue
     const config = loadConfig(root)
     // Protect and fix mode look at every path; a guard cannot see inside a shell command, so this is after the fact.
-    for (const rel of touched.map((f) => relative(root, f))) {
+    for (const rel of touched.map((f) => posixRelative(root, f))) {
       const p = (config.protect ?? []).find((x) => matches(rel, x.glob))
       if (p) msgs.push(`${rel} is protected: ${p.reason}. This command changed or removed it; restore it with \`git checkout ${before ?? "HEAD"} -- ${rel}\`.`)
     }
     if (existsSync(fixFlag(root))) {
-      const tests = touched.map((f) => relative(root, f)).filter((r) => matches(r, config.tests ?? []))
+      const tests = touched.map((f) => posixRelative(root, f)).filter((r) => matches(r, config.tests ?? []))
       if (tests.length)
         msgs.push(`Fix mode: this command changed tests (${tests.join(", ")}). Restore them with \`git checkout -- <file>\` and fix the code instead, or ask the user if a test is wrong.`)
     }
@@ -404,11 +407,12 @@ export function start(input, stateFile = stateFileFor(normalize(input).session))
     try {
       c = loadConfig(r)
     } catch {
-      return `${relative(base, r) || "."} (sdlc.json unreadable: fix it)` // one bad repo must not drop the pointer for all
+      return `${posixRelative(base, r) || "."} (sdlc.json unreadable: fix it)` // one bad repo must not drop the pointer for all
     }
-    return `${relative(base, r) || "."} (artifacts in ${c.artifacts ?? "docs/work"}/<date>-<slug>/, debt in ${c.debt ?? "docs/debt.md"})`
+    return `${posixRelative(base, r) || "."} (artifacts in ${c.artifacts ?? "docs/work"}/<date>-<slug>/, debt in ${c.debt ?? "docs/debt.md"})`
   })
-  return `This workspace follows the sdlc process (sdlc.json in: ${where.join(", ")}). Before any code change, review or plan there, invoke the \`sdlc\` skill and state the lane (S, M or L) with its reason.`
+  // Lane S is spelled out here so a copy or config edit does not load the whole skill.
+  return `This workspace follows the sdlc process (sdlc.json in: ${where.join(", ")}). Lane S (copy, config, styling, a rename: no new logic, not even a short branch) needs no skill: say "Lane S" with the reason, edit, and the hooks check it. Before any other code change, review or plan there, invoke the \`sdlc\` skill and state the lane (M or L) with its reason.`
 }
 
 // ---- output: one adapter per host -------------------------------------------------------------
