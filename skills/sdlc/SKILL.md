@@ -61,9 +61,12 @@ breached metric: write `intent.md` with `Source:` naming it and the evidence, th
 
 ## 3. The review loop (lanes M and L): at most three reviews
 
-The reviewer (role `review`) is always a fresh context on the most capable model; cheap reviewers miss defects.
+The reviewer (role `review`) is always a fresh context. Its model follows the reasoning the round needs:
+- R1 on lane L (several modules, `riskyPaths`): the most capable model. On Claude Code pass `model: opus`.
+- R1 on lane M, and scoped R2/R3 (checking named findings): a mid-tier model (`sonnet`, the agent's default).
+  Never the cheapest tier; it misses defects.
 On Claude Code it is the `sdlc:reviewer` agent. Elsewhere, start a fresh subagent whose instructions are
-[references/reviewer.md](references/reviewer.md), on the strongest model the host offers, told to change nothing;
+[references/reviewer.md](references/reviewer.md), on the model the list above names, told to change nothing;
 a host with no subagents gets the same file in a new session. Package the change first:
 `node <this skill dir>/scripts/review-package.mjs <base>` prints a file with everything since `<base>` (committed or
 not, new files included) and the rule cards that bind it.
