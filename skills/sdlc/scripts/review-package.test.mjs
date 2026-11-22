@@ -75,3 +75,18 @@ test("a file with a huge diff is listed, not inlined", () => {
   assert.match(p, /\+export const a = 2/)
   assert.doesNotMatch(p.split("## Diff")[1], /lock\.json/)
 })
+
+test("a head given by name prints its sha, and a huge non-ASCII file is still left out", () => {
+  const root = mkdtempSync(join(tmpdir(), "sdlc-pkg-"))
+  const git = (...a) => execFileSync("git", ["-c", "user.email=e@x", "-c", "user.name=e", ...a], { cwd: root, encoding: "utf8" })
+  git("init", "-q")
+  writeFileSync(join(root, "a.ts"), "export const a = 1\n")
+  git("add", "-A"); git("commit", "-qm", "init")
+  const base = git("rev-parse", "HEAD").trim()
+  writeFileSync(join(root, "é.json"), "x\n".repeat(900))
+  git("add", "-A"); git("commit", "-qm", "big")
+  const p = readFileSync(execFileSync("node", [SCRIPT, base, "HEAD"], { cwd: root, encoding: "utf8" }).trim(), "utf8")
+  assert.match(p, new RegExp(`^Snapshot: ${git("rev-parse", "HEAD").trim()} `, "m")) // not "HEAD", which moves
+  assert.match(p, /Not inlined[^\n]*\né\.json/)
+  assert.doesNotMatch(p.split("## Diff")[1], /^\+x$/m)
+})

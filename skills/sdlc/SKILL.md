@@ -1,6 +1,6 @@
 ---
 name: sdlc
-description: The development process for a repo that has an sdlc.json (in .agents/ or .claude/). Use at the start of any feature, bug fix, refactor or other code change there, to pick the lane, and again before review and before saying the work is done. Also use when asked to "follow the sdlc", review a change, or run the review loop.
+description: The development process for a repo that has an sdlc.json (in .agents/ or .claude/). Use at the start of any feature, bug fix, refactor or other code change there, to pick the lane; it holds the review and done steps too, so invoke it once per session and again only when it is no longer in context (after a compaction). Also use when asked to "follow the sdlc", review a change, or run the review loop.
 ---
 
 # SDLC
@@ -101,6 +101,9 @@ still holds it, and the new R1 reviews the closed change again. A fix for a find
   lines to the user; update the tracker yourself only when the user asks.
 - A mistake corrected for the second time (by a review or by the user) goes into the repo's agent instructions
   (CLAUDE.md or AGENTS.md) in this change, so the next session starts with it. Say when a change made them stale.
+- After the report, when the user moves to an unrelated change, suggest a fresh context first (`/clear` on Claude
+  Code, a new session elsewhere): the artifacts, the debt file and git carry what the next change needs, while a
+  long session pays for every earlier turn again on each new one. Say it once, in one line.
 - Commit, push and merge only when the user asks. The agent never approves its own work: the PR review in CI
   (`templates/ci/pr-review.yml`, when the repo uses it) and a human code owner come after this loop, not instead.
 

@@ -140,6 +140,7 @@ const newContent = (ti) =>
 // ---- guard -----------------------------------------------------------------------------------
 
 const SDD = /(^|:)subagent-driven-development$/
+const MODEL_ALIASES = ["sonnet", "opus", "haiku", "fable"]
 
 /** Claude's Skill and Agent calls: the build role and the model of each subagent come from sdlc.json, not from
  *  what the agent remembers. {decision, reason, updatedInput?} or null. */
@@ -151,7 +152,7 @@ function guardDispatch(e) {
     return {
       decision: "deny",
       reason:
-        "sdlc: build is inline in this repo (providers.build in sdlc.json), so work the plan here; the review is the sdlc loop. " +
+        "sdlc: build is inline in this repo (sdlc.json providers.build does not name subagent-driven-development), so work the plan here; the review is the sdlc loop. " +
         "A subagent per task re-reads the code and the startup context for every task.",
     }
   }
@@ -159,7 +160,8 @@ function guardDispatch(e) {
   const type = String(e.ti.subagent_type ?? "")
   let model = configs.map((c) => c.models?.[type]).find(Boolean)
   if (!model && type === "sdlc:reviewer" && e.ti.model === "haiku") model = "sonnet" // the cheapest tier misses defects
-  if (!model || model === e.ti.model) return null
+  // The Agent tool takes aliases only; a typo here would make that subagent type unable to start, so it is skipped.
+  if (!MODEL_ALIASES.includes(model) || model === e.ti.model) return null
   return { decision: "allow", reason: `sdlc: ${type || "subagent"} runs on ${model} (sdlc.json)`, updatedInput: { ...e.ti, model } }
 }
 
@@ -437,7 +439,7 @@ export function start(input, stateFile = stateFileFor(normalize(input).session))
     return `${posixRelative(base, r) || "."} (artifacts in ${c.artifacts ?? "docs/work"}/<date>-<slug>/, debt in ${c.debt ?? "docs/debt.md"})`
   })
   // Lane S is spelled out here so a copy or config edit does not load the whole skill.
-  return `This workspace follows the sdlc process (sdlc.json in: ${where.join(", ")}). Lane S (copy, config, styling, a rename: no new logic, not even a short branch) needs no skill: say "Lane S" with the reason, edit, and the hooks check it. Before any other code change, review or plan there, invoke the \`sdlc\` skill and state the lane (M or L) with its reason.`
+  return `This workspace follows the sdlc process (sdlc.json in: ${where.join(", ")}). Lane S (copy, config, styling, a rename: no new logic, not even a short branch) needs no skill: say "Lane S" with the reason, edit, and the hooks check it. Before any other code change, review or plan there, invoke the \`sdlc\` skill (once per session; it stays in context) and state the lane (M or L) with its reason.`
 }
 
 // ---- output: one adapter per host -------------------------------------------------------------
@@ -552,7 +554,8 @@ function main() {
     if (g) emit(host.guard(g))
     else if (host.pass) emit(host.pass)
     // Any tool that runs and is not a file edit may still write files (a subagent whose model was set included).
-    if ((!g || g.decision === "allow") && !normalize(input).files.length) markBash(input)
+    const e = normalize(input) // Skill has no post-tool check to read the mark
+    if ((!g || g.decision === "allow") && !e.files.length && e.tool !== "Skill") markBash(input)
   } else if (mode === "check") {
     const msg = check(input, { rules })
     if (msg) emit(host.context(msg, session))

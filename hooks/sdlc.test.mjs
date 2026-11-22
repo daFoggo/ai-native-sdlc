@@ -445,6 +445,7 @@ test("a subagent's model comes from sdlc.json, and the reviewer never runs on ha
   assert.equal(agent(root, { subagent_type: "scout" }), null) // not in the map
   assert.equal(agent(root, { subagent_type: "sdlc:reviewer", model: "haiku" }).updatedInput.model, "sonnet")
   assert.equal(agent(root, { subagent_type: "sdlc:reviewer", model: "opus" }), null)
+  assert.equal(agent(repo({ models: { implementer: "opus-4.5" } }), { subagent_type: "implementer" }), null) // not an alias: left alone
   const out = spawnSync("node", [SCRIPT, "guard"], {
     input: JSON.stringify({ tool_name: "Agent", tool_input: { prompt: "p", subagent_type: "implementer" }, cwd: root }),
     encoding: "utf8",

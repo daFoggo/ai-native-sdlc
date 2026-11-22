@@ -8,9 +8,9 @@
 //                                                      the whole change
 
 import { execFileSync } from "node:child_process"
-import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { copyFileSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { join, matchesGlob } from "node:path"
+import { join, matchesGlob, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
 const CONTEXT = "-U5" // the reviewer reads the files for more; wider context is paid again on every round
@@ -48,7 +48,10 @@ function snapshot(git, root) {
   const index = join(tmpdir(), `sdlc-index-${process.pid}-${Date.now()}`)
   const env = { ...process.env, GIT_INDEX_FILE: index }
   try {
-    git({ env }, "read-tree", "HEAD")
+    // A copy of the real index keeps its stat cache, so only changed files are hashed again.
+    const real = resolve(root, git({}, "rev-parse", "--git-path", "index").trim())
+    if (existsSync(real)) copyFileSync(real, index)
+    else git({ env }, "read-tree", "HEAD")
     git({ env, stdio: ["ignore", "pipe", "ignore"] }, "add", "-A", "--", ".") // line-ending warnings are noise the agent pays for
     const tree = git({ env }, "write-tree").trim()
     return git({}, "commit-tree", tree, "-p", "HEAD", "-m", "sdlc review snapshot").trim()
@@ -68,13 +71,14 @@ function main() {
   const root = git({}, "rev-parse", "--show-toplevel").trim()
   const run = (...a) => git({ cwd: root }, ...a)
   // Always a commit: the working tree becomes one, so new files need no special case and the next round can diff from it.
-  const to = head ?? snapshot((o, ...a) => git({ cwd: root, ...o }, ...a), root)
+  const to = head ? run("rev-parse", "--verify", `${head}^{commit}`).trim() : snapshot((o, ...a) => git({ cwd: root, ...o }, ...a), root)
   const from = since ?? base
   const range = `${from}..${to}`
 
-  const files = run("diff", "--name-only", range).split("\n").filter(Boolean)
-  const big = run("diff", "--numstat", range)
-    .split("\n")
+  // -z: raw paths (no quoting of non-ASCII names); --no-renames: one plain path per entry, both sides of a rename.
+  const files = run("diff", "--name-only", "-z", "--no-renames", range).split("\0").filter(Boolean)
+  const big = run("diff", "--numstat", "-z", "--no-renames", range)
+    .split("\0")
     .map((l) => l.split("\t"))
     .filter(([a, d, f]) => f && (a === "-" || Number(a) + Number(d) > MAX_FILE_LINES))
     .map(([, , f]) => f)
