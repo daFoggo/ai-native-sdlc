@@ -17,7 +17,7 @@ Agents miss a project's standards for three reasons, and each has a mechanical f
 |---|---|
 | Docs are read only when the agent thinks of it | Path-scoped rule cards (`.claude/rules/*.md` with `paths:`) load when a matching file is touched (on hosts without path rules, the check hook hands them over); the review package hands the same cards to the reviewer |
 | A rule written as prose cannot be enforced | `sdlc-init` turns every checkable rule into a lint rule or script; a hook runs it on each edited file and stays silent when it passes |
-| "Done" is claimed without running anything | A Stop hook runs the project's verify command whenever the tree changed since the last green run |
+| "Done" is claimed without running anything | A Stop hook runs the project's verify command in each repo this session changed since the last green run; a verify that runs out of time warns instead of blocking |
 
 Review is capped at three rounds (one full review, then at most two reviews of the fix only). Superpowers' own
 measurements found that unbounded loops are the biggest source of cost variance, that re-reviewing the whole diff

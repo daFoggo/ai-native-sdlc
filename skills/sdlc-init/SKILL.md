@@ -18,7 +18,10 @@ test config, and recent git history. Do not ask what the repo already answers.
    already enforced (name the lint rule), checkable (a linter or script could catch it), or judgment.
 2. **Measure before enforcing.** For each checkable rule, count today's violations (grep or a trial lint run).
    Each one is either fixed to the rule or waived inline with the reason and the doc that allows it. Never ship
-   a rule that fails on day one, and never loosen a rule to make it pass.
+   a rule that fails on day one, and never loosen a rule to make it pass. Fix only a handful; when a rule's
+   violations span more than about five files, waive those files in the lint config (a per-file override or a
+   baseline, with the reason), add the cleanup to the debt file, and ask before touching them. Onboarding never
+   rewrites existing code wholesale, deletes docstrings or edits tests to reach a green first run.
 3. **Make the checkable rules real**, in the repo's own lint config so CI and humans get them too. Keep changes
    to existing code to the fixes from step 2, and restore anything a formatter reflowed that the change did not need.
 4. **Rule cards** for the judgment rules: `.claude/rules/<area>.md` (or `.agents/rules/`) with `paths:` globs
@@ -30,7 +33,9 @@ test config, and recent git history. Do not ask what the repo already answers.
    `../sdlc/templates/sdlc.json`.
    - `verify`: one command, under a few minutes, that never disturbs running dev servers, and that runs every
      fast step the repo's CI runs (read `.github/workflows/` or the CI config: lint, format check, types, i18n or
-     other repo scripts, tests). Prefer the script CI itself calls, so the two cannot drift. A CI step left out
+     other repo scripts, tests). Prefer the script CI itself calls, so the two cannot drift. It runs at every Stop
+     that changed the repo, so it must stay fast: a test suite of several minutes belongs in CI, with a fast
+     subset here (the Stop hook gives all repos nine minutes together and only warns when they run out). A CI step left out
      (too slow, needs services) is named in CLAUDE.md or AGENTS.md as run by CI only. A failure the agent only
      meets in CI is a missing step here.
    - `artifacts` and `debt`: where this repo already keeps plans or specs and its debt or TODO list (look in docs/

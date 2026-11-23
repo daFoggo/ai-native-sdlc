@@ -25,6 +25,7 @@ import { matchingRules } from "../skills/sdlc/scripts/review-package.mjs"
 // Paths in messages, globs and git commands use "/" on every OS (Windows' relative() gives "\").
 const posixRelative = (from, to) => relative(from, to).replaceAll("\\", "/")
 
+const VERIFY_BUDGET = 540 // seconds for all repos together: the Stop hook is killed at 600 (hooks/claude-codex.json)
 const MAX_BLOCKS = 3 // Stop blocks per session and repo before verify only warns: the review-loop cap.
 const CONFIG_DIRS = [".agents", ".claude"]
 
@@ -47,7 +48,23 @@ const matches = (rel, globs) => [globs].flat().some((g) => matchesGlob(rel, g))
 
 /** The repo above `dir`, or, from a folder that holds several repos, each child repo with an sdlc.json. */
 const rootsFor = (dir) => (findRoot(dir) ? [findRoot(dir)] : verifyRoots(dir))
+
+/** rootsFor(cwd), plus every repo a shell command moves into (`cd`, `pushd`, `git -C`): the rules go where it goes. */
+function shellRoots(cwd, command = "") {
+  const roots = new Set(rootsFor(cwd))
+  for (const m of command.matchAll(/(?:\b(?:cd|pushd)|\bgit\s+-C)\s+(?:--\s+)?("[^"]*"|'[^']*'|[^\s;&|()]+)/g)) {
+    const dir = m[1].replace(/^["']|["']$/g, "").replace(/^~(?=\/|$)/, homedir())
+    const root = findRoot(resolve(cwd, dir))
+    if (root) roots.add(root)
+  }
+  return [...roots]
+}
 export const stateFileFor = (session) => join(tmpdir(), `sdlc-${session}.json`)
+// One empty file per session and repo, written by check/bash when this session changes the repo: the Stop hook
+// verifies only those, not repos other sessions or agents are changing. A file, not the state JSON, so parallel
+// hooks cannot lose each other's mark.
+const touchedFile = (session, root) => join(tmpdir(), `sdlc-touched-${session}-${createHash("sha1").update(root).digest("hex").slice(0, 12)}`)
+export const markTouched = (session, root) => writeFileSync(touchedFile(session, root), "")
 const readState = (f) => (existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : {})
 
 function env(config) {
@@ -58,7 +75,7 @@ function env(config) {
 function run(cmd, cwd, config, timeoutSec = 120) {
   const r = spawnSync("bash", ["-c", cmd], { cwd, env: env(config), encoding: "utf8", timeout: timeoutSec * 1000 })
   const out = `${r.stdout ?? ""}${r.stderr ?? ""}`.trim()
-  return { ok: r.status === 0, out: r.error ? `${out}\n${r.error.message}` : out }
+  return { ok: r.status === 0, timedOut: r.error?.code === "ETIMEDOUT", out: r.error ? `${out}\n${r.error.message}` : out }
 }
 
 const tail = (text, n = 30) => text.split("\n").slice(-n).join("\n")
@@ -171,7 +188,7 @@ export function guard(input) {
   if (e.tool === "Skill" || e.tool === "Agent" || e.tool === "Task") return guardDispatch(e)
   if (e.shell) {
     // From a multi-repo parent folder the command may `cd` into any child repo: apply all of theirs.
-    const configs = rootsFor(e.cwd).map(loadConfig)
+    const configs = shellRoots(e.cwd, e.command).map(loadConfig)
     const hit = (list) => list.find((b) => new RegExp(b.pattern).test(e.command))
     const ban = hit(configs.flatMap((c) => c.denyBash ?? []))
     if (ban) return { decision: "deny", reason: `Blocked by sdlc.json: ${ban.reason}` }
@@ -218,6 +235,7 @@ export function checkFile(abs, { rules = false, session = "nosession" } = {}) {
   if (!existsSync(abs)) return null
   const root = findRoot(dirname(abs))
   if (!root) return null
+  markTouched(session, root)
   const config = loadConfig(root)
   const rel = posixRelative(root, abs)
   const out = []
@@ -251,7 +269,7 @@ const bashMark = (e) => join(tmpdir(), `sdlc-bash-${e.session}-${e.toolUse}`)
 
 export function markBash(input) {
   const e = normalize(input)
-  const roots = rootsFor(e.cwd)
+  const roots = shellRoots(e.cwd, e.command)
   if (roots.length) writeFileSync(bashMark(e), JSON.stringify({ since: Date.now(), heads: Object.fromEntries(roots.map((r) => [r, headOf(r)])) }))
 }
 
@@ -282,7 +300,7 @@ export function changedSince(root, since) {
 export function bashCheck(input, mark, { rules = false } = {}) {
   const e = normalize(input)
   const msgs = []
-  for (const root of rootsFor(e.cwd)) {
+  for (const root of shellRoots(e.cwd, e.command)) {
     let changed
     try {
       changed = changedSince(root, mark.since - 1000) // mtime granularity on some filesystems is 1 s
@@ -304,6 +322,7 @@ export function bashCheck(input, mark, { rules = false } = {}) {
     const written = [...new Set([...changed.files, ...committed.filter((f) => existsSync(f))])]
     const touched = [...new Set([...written, ...changed.deleted, ...committed])]
     if (!touched.length) continue
+    markTouched(e.session, root)
     const config = loadConfig(root)
     // Protect and fix mode look at every path; a guard cannot see inside a shell command, so this is after the fact.
     for (const rel of touched.map((f) => posixRelative(root, f))) {
@@ -381,19 +400,26 @@ const projectDir = (input) =>
 
 export function verify(input, stateFile = stateFileFor(normalize(input).session)) {
   const state = readState(stateFile)
+  const session = normalize(input).session
   const block = []
   const warn = []
+  const deadline = Date.now() + VERIFY_BUDGET * 1000
   for (const root of rootsFor(projectDir(input))) {
     const config = loadConfig(root)
     if (!config.verify) continue
     const s = (state[root] ??= { blocks: 0, base: headOf(root) })
+    // A repo this session never changed is not this turn's to verify (start marks the repos it tracks; a host
+    // without a start hook keeps verifying every changed repo). Cleared first, so edits during verify count again.
+    const mark = touchedFile(session, root)
+    if (s.tracked && !existsSync(mark)) continue
+    rmSync(mark, { force: true })
     let fp
     try {
       fp = fingerprint(root, s.base, config)
     } catch {
       continue // not a git repo
     }
-    if (!fp || fp === s.green) continue
+    if (!fp || fp === s.green || fp === s.timedOut) continue
     if (fp === s.failed) {
       // Said once per failing tree, so a host that can only "continue" (Antigravity) does not loop.
       if (s.warned !== fp) {
@@ -402,9 +428,19 @@ export function verify(input, stateFile = stateFileFor(normalize(input).session)
       }
       continue
     }
-    const r = run(config.verify, root, config, config.verifyTimeout ?? 540)
+    const left = Math.floor((deadline - Date.now()) / 1000)
+    const limit = Math.min(config.verifyTimeout ?? VERIFY_BUDGET, left)
+    if (left < 10) {
+      warn.push(`verify skipped in ${root}: the Stop hook's time ran out on other repos. Run \`${config.verify}\` there before saying done.`)
+      continue
+    }
+    const r = run(config.verify, root, config, limit)
     if (r.ok) Object.assign(s, { green: fp, failed: null, blocks: 0 })
-    else {
+    else if (r.timedOut) {
+      // Too slow is not a failure: blocking would stall every turn on the clock, not on a defect.
+      s.timedOut = fp
+      warn.push(`verify did not finish in ${limit}s in ${root} (\`${config.verify}\`); not blocking. Run it yourself before saying done, and make it faster (CI-only steps out of verify) or raise verifyTimeout in sdlc.json.`)
+    } else {
       Object.assign(s, { failed: fp, blocks: s.blocks + 1 })
       const msg = `verify failed in ${root}: \`${config.verify}\`\n${tail(r.out, 40)}`
       if (s.blocks <= MAX_BLOCKS) block.push(msg)
@@ -426,7 +462,7 @@ export function start(input, stateFile = stateFileFor(normalize(input).session))
   if (!roots.length) return null
   // Remember where each repo stood, so verify also sees work that gets committed during the session.
   const state = readState(stateFile)
-  for (const r of roots) state[r] ??= { blocks: 0, base: headOf(r) }
+  for (const r of roots) state[r] = { ...(state[r] ?? { blocks: 0, base: headOf(r) }), tracked: true }
   writeFileSync(stateFile, JSON.stringify(state))
   // The paths are said up front: agents fall back to the skill's defaults when the repo set its own.
   const where = roots.map((r) => {

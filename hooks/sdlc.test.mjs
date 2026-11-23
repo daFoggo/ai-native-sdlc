@@ -2,11 +2,11 @@ import assert from "node:assert/strict"
 import { execFileSync, spawnSync } from "node:child_process"
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { join } from "node:path"
+import { basename, join } from "node:path"
 import { after, test } from "node:test"
 import { fileURLToPath } from "node:url"
 
-import { HOSTS, check, findSecret, guard, hostOf, normalize, start, verify } from "./sdlc.mjs"
+import { HOSTS, check, findSecret, guard, hostOf, markTouched, normalize, start, verify } from "./sdlc.mjs"
 
 const SCRIPT = fileURLToPath(new URL("./sdlc.mjs", import.meta.url))
 
@@ -284,6 +284,7 @@ test("R1-2a: committing the change does not dodge verify (base recorded at sessi
   start({ cwd: root }, state)
   writeFileSync(join(root, "broken"), "1")
   gitc(root, "add", "-A"); gitc(root, "commit", "-qm", "break it") // clean tree, new HEAD
+  markTouched("nosession", root) // what the bash hook does after a commit made through the shell
   assert.equal(verify({ cwd: root }, state).block.length, 1)
 })
 
@@ -453,4 +454,40 @@ test("a subagent's model comes from sdlc.json, and the reviewer never runs on ha
   const h = JSON.parse(out.stdout).hookSpecificOutput
   assert.equal(h.permissionDecision, "allow")
   assert.deepEqual(h.updatedInput, { prompt: "p", subagent_type: "implementer", model: "sonnet" })
+})
+
+test("verify runs only in repos this session changed, once start has tracked them", () => {
+  const parent = mkdtempSync(join(BASE, "parent-"))
+  const mine = repo({ verify: "exit 1" }, ".claude", parent)
+  const other = repo({ verify: "exit 1" }, ".claude", parent)
+  const session = `v${process.pid}${Date.now()}`
+  const state = stateFile()
+  start({ cwd: parent, session_id: session }, state)
+  writeFileSync(join(other, "x.ts"), "1") // another agent's edit
+  writeFileSync(join(mine, "a.ts"), "1")
+  assert.equal(verify({ cwd: parent, session_id: session }, state).block.length, 0) // nothing this session did
+  check({ tool_name: "Write", tool_input: { file_path: join(mine, "a.ts") }, cwd: mine, session_id: session })
+  const r = verify({ cwd: parent, session_id: session }, state)
+  assert.equal(r.block.length, 1)
+  assert.match(r.block[0], new RegExp(basename(mine)))
+  assert.equal(verify({ cwd: parent, session_id: session }, state).block.length, 0) // mark used up
+})
+
+test("a verify that runs out of time warns instead of blocking the turn", () => {
+  const root = repo({ verify: "sleep 30", verifyTimeout: 1 })
+  writeFileSync(join(root, "a.ts"), "1")
+  const r = verify({ cwd: root }, stateFile())
+  assert.equal(r.block.length, 0)
+  assert.match(r.warn.join(), /did not finish/)
+})
+
+test("shell rules follow cd into another repo", () => {
+  const parent = mkdtempSync(join(BASE, "parent-"))
+  const here = repo({}, ".claude", parent)
+  const there = repo({ denyBash: [{ pattern: "npm install", reason: "pnpm only" }] }, ".claude", parent)
+  const name = basename(there)
+  const bash = (command) => reason(guard({ tool_name: "Bash", tool_input: { command }, cwd: here }))
+  assert.match(bash(`cd ../${name} && npm install`), /pnpm only/)
+  assert.match(bash(`git -C "../${name}" status; npm install`), /pnpm only/)
+  assert.equal(bash("npm install"), null) // this repo allows it
 })
