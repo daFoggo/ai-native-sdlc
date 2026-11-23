@@ -12,6 +12,10 @@ CLAUDE.md or AGENTS.md line**. A rule written as prose is the last resort, becau
 Read before writing: the repo's CLAUDE.md / AGENTS.md, every doc they point to, its own skills, its lint and
 test config, and recent git history. Do not ask what the repo already answers.
 
+Several repos: one subagent per repo is fine, on a mid-tier model (Claude Code: `model: sonnet`). Onboarding is
+reading and mechanical edits; a subagent with no model inherits the session's, often the most expensive, and each
+one runs for dozens of turns.
+
 ## Steps (audit each before the next)
 
 1. **Inventory.** List every rule the docs and skills state, one line each, with its source. Mark each:
