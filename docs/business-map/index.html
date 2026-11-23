@@ -1,79 +1,108 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Business map</title>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bản đồ nghiệp vụ: plugin sdlc</title>
 <style>
-:root{--bg:#fff;--fg:#1c1c1c;--muted:#666;--line:#ddd;--obs:#1f6f43;--doc:#1d4f91;--inf:#8a5a00;--ver:#5b2b8c}
-@media (prefers-color-scheme:dark){:root{--bg:#141414;--fg:#e8e8e8;--muted:#9a9a9a;--line:#333;--obs:#6fcf97;--doc:#7aa7e8;--inf:#e0b05a;--ver:#c29ae8}}
-body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,sans-serif}
-.wrap{display:grid;grid-template-columns:minmax(200px,260px) 1fr;gap:24px;max-width:1200px;margin:auto;padding:16px}
-@media (max-width:720px){.wrap{grid-template-columns:1fr}}
-nav ul,.legend{list-style:none;padding:0;margin:0}nav li{margin:4px 0}
-button{font:inherit;color:inherit;background:none;border:1px solid var(--line);border-radius:6px;padding:4px 8px;cursor:pointer;text-align:left}
-button[aria-current=true]{border-color:var(--fg)}small,.actor{color:var(--muted)}
-pre.mermaid{overflow-x:auto;background:transparent}code{font-size:13px}
-.k{font-size:12px;border:1px solid currentColor;border-radius:4px;padding:0 4px}
-.k-observed{color:var(--obs)}.k-documented{color:var(--doc)}.k-inferred{color:var(--inf)}.k-verified{color:var(--ver)}
-.steps li{margin:6px 0}.ev{margin:4px 0 8px}.gap{color:var(--inf)}
+:root{--bg:#fff;--fg:#1c1c1c;--muted:#5f5f5f;--line:#ddd;--card:#f6f6f6;--warn:#8a5a00;--hit:#fff4cc}
+@media (prefers-color-scheme:dark){:root{--bg:#141414;--fg:#e8e8e8;--muted:#a0a0a0;--line:#333;--card:#1d1d1d;--warn:#e0b05a;--hit:#3a3220}}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 system-ui,sans-serif}
+.wrap{display:grid;grid-template-columns:minmax(220px,280px) 1fr;gap:28px;max-width:1200px;margin:auto;padding:16px}
+@media (max-width:760px){.wrap{grid-template-columns:1fr}}main{min-width:0}
+h1{font-size:22px;margin:4px 0 8px}h2{margin:0 0 4px}h3{margin:20px 0 8px;font-size:16px}h4{margin:0 0 6px;font-size:15px}
+nav ul,.legend{list-style:none;padding:0;margin:0}nav li{margin:6px 0}
+nav button{display:block;width:100%;font:inherit;color:inherit;background:none;border:1px solid var(--line);border-radius:8px;padding:8px 10px;cursor:pointer;text-align:left}
+nav button small{display:block;color:var(--muted)}nav button[aria-current=true]{border-color:var(--fg);background:var(--card)}
+.howto{font-size:14px;color:var(--muted)}.legend li{display:flex;gap:8px;align-items:center;margin:4px 0;font-size:14px}
+.sw{width:18px;height:12px;border:3px solid;border-radius:3px}.sw-inferred{border-style:dashed}
+.sw-verified{border-color:#8b5cf6}.sw-observed{border-color:#22a05a}.sw-documented{border-color:#3b82f6}.sw-inferred{border-color:#d4a017}
+.summary{font-size:16px;margin:0 0 4px}.meta,.src,footer{color:var(--muted);font-size:13px}
+.attention{border-left:4px solid var(--warn);background:var(--card);padding:4px 14px;border-radius:4px}.attention h3{margin-top:8px;color:var(--warn)}
+pre.mermaid{overflow-x:auto;background:transparent;margin:16px 0}pre.mermaid svg{min-width:min(640px,100%)}@media (max-width:760px){pre.mermaid svg{min-width:640px}}
+.steps{padding-left:22px}.step{background:var(--card);border-radius:8px;padding:10px 14px;margin:10px 0;scroll-margin-top:16px}
+.step.hit{background:var(--hit)}.step ul{margin:4px 0;padding-left:18px}.src{margin:6px 0 0}.warn{color:var(--warn);margin:4px 0}
+code{font-size:12px;color:var(--muted)}
+.k{font-size:12px;font-weight:500;border:2px solid;border-radius:4px;padding:0 5px;white-space:nowrap}.k-inferred{border-style:dashed}
+.k-verified{border-color:#8b5cf6}.k-observed{border-color:#22a05a}.k-documented{border-color:#3b82f6}.k-inferred{border-color:#d4a017}
 </style></head><body><div class="wrap">
-<nav><h1>Business map</h1><p><small>commit 12f31ac34e2c18041f00f0e67224c80bee28d5bd</small></p><ul><li><button type="button" data-open="0">Agent edits a file in an opted-in repo</button> <small>flow · 2 gaps</small></li><li><button type="button" data-open="1">Review loop of one change</button> <small>state · 1 gaps</small></li></ul>
-<h3>Evidence</h3><ul class="legend"><li><span class="k k-observed">observed</span> read in code</li><li><span class="k k-documented">documented</span> a doc states it</li><li><span class="k k-inferred">inferred</span> the agent's guess</li><li><span class="k k-verified">verified</span> proven by running it</li></ul></nav>
+<nav><h1>Bản đồ nghiệp vụ: plugin sdlc</h1>
+<h3>Cách đọc bản đồ</h3><p class="howto">Mỗi luồng là một phần nghiệp vụ, vẽ bằng ô và mũi tên; chữ trên mũi tên cho biết khi nào đi theo nhánh đó. Viền của ô cho biết bản đồ chắc chắn đến đâu về bước đó, dấu ⚠ đánh dấu bước còn câu hỏi mở. Bấm vào một ô để nhảy tới bước đó bên dưới, nơi ghi rõ từng nguồn.</p><ul class="legend"><li><span class="sw sw-verified"></span>Đã chạy thử, đúng</li><li><span class="sw sw-observed"></span>Đã thấy trong code</li><li><span class="sw sw-documented"></span>Tài liệu ghi vậy</li><li><span class="sw sw-inferred"></span>Đoán, chưa xác nhận</li></ul>
+<ul><li><button type="button" data-open="0">Agent sửa một file<small>6 bước · ⚠ 2 cần chú ý</small></button></li><li><button type="button" data-open="1">Vòng review của một thay đổi<small>5 bước · ⚠ 1 cần chú ý</small></button></li></ul>
+<footer>Dựng từ commit fccb53e</footer></nav>
 <main><section id="flow-0" data-flow="edit">
-<h2>Agent edits a file in an opted-in repo</h2><p class="actor">Actor: Coding agent</p>
+<h2>Agent sửa một file</h2>
+<p class="summary">Mỗi lần agent sửa file trong repo đã bật sdlc, plugin chặn những sửa đổi sai luật trước khi chúng xảy ra và kiểm tra lại sau khi sửa. Kết quả cuối: lượt làm việc chỉ kết thúc khi lệnh verify của repo chạy xanh.</p><p class="meta">Ai thực hiện: Agent viết code (Claude, Codex…)</p>
+<div class="attention"><h3>Cần chú ý</h3><ul><li><b>Phụ thuộc hệ thống khác</b> · Bị nhắc một lần: đọc skill của vùng code này trước: dựa vào việc Claude gửi agent_id trong subagent; chưa có payload thật nào chứng minh</li><li><b>Chưa có test</b> · Kết thúc lượt: lệnh verify của repo phải xanh: npm test (~24 giây) chạy ở mỗi lần dừng; chưa đo nó làm người dùng chờ bao nhiêu</li></ul></div>
 <pre class="mermaid">flowchart TD
-  s0[&quot;Session starts and is told the repo follows sdlc&quot;]
-  s1[&quot;Edit is checked before it happens&quot;]
-  s2[&quot;Refused: vendored file, secret or test in fix mode&quot;]
-  s3[&quot;Refused once: load the skill mapped to this code first&quot;]
-  s4[&quot;File is written and its fast check runs&quot;]
-  s5[&quot;Turn ends: the repo&#39;s verify command must pass&quot;]
+  s0[&quot;Mở phiên làm việc, agent được báo repo này theo sdlc&quot;]
+  s1[&quot;Plugin kiểm tra sửa đổi trước khi cho ghi&quot;]
+  s2[&quot;Bị từ chối, agent phải sửa cách khác&quot;]
+  s3[&quot;⚠ Bị nhắc một lần: đọc skill của vùng code này trước&quot;]
+  s4[&quot;File được ghi, chạy kiểm tra nhanh cho file đó&quot;]
+  s5[&quot;⚠ Kết thúc lượt: lệnh verify của repo phải xanh&quot;]
   s0 --&gt; s1
-  s1 --&gt; s2
-  s1 --&gt; s3
-  s1 --&gt; s4
-  s3 --&gt; s1
+  s1 --&gt;|&quot;file bị khóa, có secret, hoặc là test khi đang sửa bug&quot;| s2
+  s1 --&gt;|&quot;file thuộc vùng có skill riêng mà agent chưa đọc&quot;| s3
+  s1 --&gt;|&quot;không vi phạm gì&quot;| s4
+  s3 --&gt;|&quot;agent đã đọc skill, hoặc thử lại&quot;| s1
   s4 --&gt; s5
+  classDef verified stroke:#8b5cf6,stroke-width:3px
+  classDef observed stroke:#22a05a,stroke-width:3px
+  classDef documented stroke:#3b82f6,stroke-width:3px
+  classDef inferred stroke:#d4a017,stroke-width:3px,stroke-dasharray:6 4
+  class s0 observed
+  class s1 observed
+  class s2 observed
+  class s3 observed
+  class s4 observed
+  class s5 observed
   click s0 call showStep(0, 0)
   click s1 call showStep(0, 1)
   click s2 call showStep(0, 2)
   click s3 call showStep(0, 3)
   click s4 call showStep(0, 4)
   click s5 call showStep(0, 5)</pre>
-<h3>Steps</h3><ol class="steps"><li id="f0-s0"><button type="button" aria-expanded="false">Session starts and is told the repo follows sdlc</button><div class="ev" hidden><ul><li><span class="k k-observed">observed</span> <code>hooks/sdlc.mjs:506</code></li></ul></div></li><li id="f0-s1"><button type="button" aria-expanded="false">Edit is checked before it happens</button><div class="ev" hidden><ul><li><span class="k k-observed">observed</span> <code>hooks/sdlc.mjs:191</code></li><li><span class="k k-observed">observed</span> <code>hooks/sdlc.test.mjs:30</code> — protected path test</li></ul></div></li><li id="f0-s2"><button type="button" aria-expanded="false">Refused: vendored file, secret or test in fix mode</button><div class="ev" hidden><ul><li><span class="k k-observed">observed</span> <code>hooks/sdlc.mjs:210</code></li><li><span class="k k-observed">observed</span> <code>hooks/sdlc.mjs:217</code> — secret scan</li></ul></div></li><li id="f0-s3"><button type="button" aria-expanded="false">Refused once: load the skill mapped to this code first</button><div class="ev" hidden><ul><li><span class="k k-observed">observed</span> <code>hooks/sdlc.mjs:233</code></li><li><span class="k k-observed">observed</span> <code>hooks/sdlc.test.mjs:534</code></li><li class="gap">depends on another system: relies on Claude sending agent_id in subagents; no captured payload proves it</li></ul></div></li><li id="f0-s4"><button type="button" aria-expanded="false">File is written and its fast check runs</button><div class="ev" hidden><ul><li><span class="k k-observed">observed</span> <code>hooks/sdlc.mjs:291</code></li></ul></div></li><li id="f0-s5"><button type="button" aria-expanded="false">Turn ends: the repo&#39;s verify command must pass</button><div class="ev" hidden><ul><li><span class="k k-observed">observed</span> <code>hooks/sdlc.mjs:448</code></li><li><span class="k k-observed">observed</span> <code>hooks/sdlc.test.mjs:77</code></li><li class="gap">no test: a full npm test (~24 s) runs at every Stop; no measure of how often that delays the user</li></ul></div></li></ol>
-<h3>Gaps</h3><ul class="gaps"><li><b>Refused once: load the skill mapped to this code first</b> · depends on another system: relies on Claude sending agent_id in subagents; no captured payload proves it</li><li><b>Turn ends: the repo&#39;s verify command must pass</b> · no test: a full npm test (~24 s) runs at every Stop; no measure of how often that delays the user</li></ul>
+<h3>Các bước</h3><ol class="steps"><li id="f0-s0" class="step"><h4>Mở phiên làm việc, agent được báo repo này theo sdlc <span class="k k-observed">Đã thấy trong code</span></h4><p class="src">Lấy từ đâu</p><ul><li><span class="k k-observed">Đã thấy trong code</span> hook SessionStart in ra một dòng nhắc <code>hooks/sdlc.mjs:506</code></li></ul></li><li id="f0-s1" class="step"><h4>Plugin kiểm tra sửa đổi trước khi cho ghi <span class="k k-observed">Đã thấy trong code</span></h4><p class="src">Lấy từ đâu</p><ul><li><span class="k k-observed">Đã thấy trong code</span> <code>hooks/sdlc.mjs:191</code></li><li><span class="k k-observed">Đã thấy trong code</span> test chặn file vendored <code>hooks/sdlc.test.mjs:30</code></li></ul></li><li id="f0-s2" class="step"><h4>Bị từ chối, agent phải sửa cách khác <span class="k k-observed">Đã thấy trong code</span></h4><p class="src">Lấy từ đâu</p><ul><li><span class="k k-observed">Đã thấy trong code</span> file vendored/được bảo vệ <code>hooks/sdlc.mjs:210</code></li><li><span class="k k-observed">Đã thấy trong code</span> quét secret <code>hooks/sdlc.mjs:217</code></li></ul></li><li id="f0-s3" class="step"><h4>Bị nhắc một lần: đọc skill của vùng code này trước <span class="k k-observed">Đã thấy trong code</span></h4><p class="warn">⚠ Phụ thuộc hệ thống khác: dựa vào việc Claude gửi agent_id trong subagent; chưa có payload thật nào chứng minh</p><p class="src">Lấy từ đâu</p><ul><li><span class="k k-observed">Đã thấy trong code</span> <code>hooks/sdlc.mjs:233</code></li><li><span class="k k-observed">Đã thấy trong code</span> test: lần sau luôn được qua <code>hooks/sdlc.test.mjs:534</code></li></ul></li><li id="f0-s4" class="step"><h4>File được ghi, chạy kiểm tra nhanh cho file đó <span class="k k-observed">Đã thấy trong code</span></h4><p class="src">Lấy từ đâu</p><ul><li><span class="k k-observed">Đã thấy trong code</span> <code>hooks/sdlc.mjs:291</code></li></ul></li><li id="f0-s5" class="step"><h4>Kết thúc lượt: lệnh verify của repo phải xanh <span class="k k-observed">Đã thấy trong code</span></h4><p class="warn">⚠ Chưa có test: npm test (~24 giây) chạy ở mỗi lần dừng; chưa đo nó làm người dùng chờ bao nhiêu</p><p class="src">Lấy từ đâu</p><ul><li><span class="k k-observed">Đã thấy trong code</span> <code>hooks/sdlc.mjs:448</code></li><li><span class="k k-observed">Đã thấy trong code</span> chặn tối đa 3 lần rồi chỉ cảnh báo <code>hooks/sdlc.test.mjs:77</code></li></ul></li></ol>
 </section>
 <section id="flow-1" data-flow="review" hidden>
-<h2>Review loop of one change</h2><p class="actor">Actor: Tech lead (the user)</p>
+<h2>Vòng review của một thay đổi</h2>
+<p class="summary">Mỗi thay đổi có logic mới được một reviewer độc lập đọc, tối đa ba vòng. Kết quả cuối: thay đổi sạch, hoặc các lỗi còn mở được giao lại cho tech lead quyết.</p><p class="meta">Ai thực hiện: Tech lead (người dùng)</p>
+<div class="attention"><h3>Cần chú ý</h3><ul><li><b>Chưa rõ điều kiện chuyển</b>: chỉ có lời dặn trong skill ngăn vòng thứ tư; không hook nào đếm số vòng</li></ul></div>
 <pre class="mermaid">stateDiagram-v2
   [*] --&gt; s0
-  state &quot;Full review (R1)&quot; as s0
-  state &quot;One fix pass, then scoped R2&quot; as s1
-  state &quot;Last fix pass, then scoped R3&quot; as s2
-  state &quot;Open findings handed to the lead&quot; as s3
-  state &quot;Clean: report and debt&quot; as s4
-  s0 --&gt; s1
-  s0 --&gt; s4
-  s1 --&gt; s2
-  s1 --&gt; s4
-  s2 --&gt; s3
-  s2 --&gt; s4</pre>
-<h3>Steps</h3><ol class="steps"><li id="f1-s0"><button type="button" aria-expanded="false">Full review (R1)</button><div class="ev" hidden><ul><li><span class="k k-documented">documented</span> <code>skills/sdlc/SKILL.md:82</code></li></ul></div></li><li id="f1-s1"><button type="button" aria-expanded="false">One fix pass, then scoped R2</button><div class="ev" hidden><ul><li><span class="k k-documented">documented</span> <code>skills/sdlc/SKILL.md:91</code></li></ul></div></li><li id="f1-s2"><button type="button" aria-expanded="false">Last fix pass, then scoped R3</button><div class="ev" hidden><ul><li><span class="k k-documented">documented</span> <code>skills/sdlc/SKILL.md:93</code></li></ul></div></li><li id="f1-s3"><button type="button" aria-expanded="false">Open findings handed to the lead</button><div class="ev" hidden><ul><li><span class="k k-documented">documented</span> <code>skills/sdlc/SKILL.md:94</code></li><li><span class="k k-verified">verified</span> <code>evals/i-review-stuck/case.yaml</code> proof <code>evals/RESULTS.md</code></li></ul></div></li><li id="f1-s4"><button type="button" aria-expanded="false">Clean: report and debt</button><div class="ev" hidden><ul><li><span class="k k-verified">verified</span> <code>evals/f-review-loop/case.yaml</code> proof <code>evals/RESULTS.md</code></li></ul></div></li></ol>
-<h3>Gaps</h3><ul class="gaps"><li>state change condition: nothing but the skill&#39;s prose stops a fourth round; no hook counts rounds</li></ul>
+  state &quot;Review đầy đủ (vòng 1)&quot; as s0
+  state &quot;Sửa một lượt, review lại phần sửa (vòng 2)&quot; as s1
+  state &quot;Sửa lượt cuối, review vòng 3&quot; as s2
+  state &quot;Giao lỗi còn mở cho tech lead&quot; as s3
+  state &quot;Sạch: báo cáo và ghi nợ kỹ thuật&quot; as s4
+  s0 --&gt; s1 : có lỗi phải sửa
+  s0 --&gt; s4 : không còn lỗi
+  s1 --&gt; s2 : vẫn còn lỗi
+  s1 --&gt; s4 : hết lỗi
+  s2 --&gt; s3 : vẫn còn lỗi
+  s2 --&gt; s4 : hết lỗi
+  classDef verified stroke:#8b5cf6,stroke-width:3px
+  classDef observed stroke:#22a05a,stroke-width:3px
+  classDef documented stroke:#3b82f6,stroke-width:3px
+  classDef inferred stroke:#d4a017,stroke-width:3px,stroke-dasharray:6 4
+  class s0 documented
+  class s1 documented
+  class s2 documented
+  class s3 verified
+  class s4 verified</pre>
+<h3>Các bước</h3><ol class="steps"><li id="f1-s0" class="step"><h4>Review đầy đủ (vòng 1) <span class="k k-documented">Tài liệu ghi vậy</span></h4><p class="src">Lấy từ đâu</p><ul><li><span class="k k-documented">Tài liệu ghi vậy</span> <code>skills/sdlc/SKILL.md:82</code></li></ul></li><li id="f1-s1" class="step"><h4>Sửa một lượt, review lại phần sửa (vòng 2) <span class="k k-documented">Tài liệu ghi vậy</span></h4><p class="src">Lấy từ đâu</p><ul><li><span class="k k-documented">Tài liệu ghi vậy</span> <code>skills/sdlc/SKILL.md:91</code></li></ul></li><li id="f1-s2" class="step"><h4>Sửa lượt cuối, review vòng 3 <span class="k k-documented">Tài liệu ghi vậy</span></h4><p class="src">Lấy từ đâu</p><ul><li><span class="k k-documented">Tài liệu ghi vậy</span> <code>skills/sdlc/SKILL.md:93</code></li></ul></li><li id="f1-s3" class="step"><h4>Giao lỗi còn mở cho tech lead <span class="k k-verified">Đã chạy thử, đúng</span></h4><p class="src">Lấy từ đâu</p><ul><li><span class="k k-documented">Tài liệu ghi vậy</span> <code>skills/sdlc/SKILL.md:94</code></li><li><span class="k k-verified">Đã chạy thử, đúng</span> eval: agent dừng và bàn giao, 3/3 lần <code>evals/i-review-stuck/case.yaml</code> · bằng chứng <code>evals/RESULTS.md</code></li></ul></li><li id="f1-s4" class="step"><h4>Sạch: báo cáo và ghi nợ kỹ thuật <span class="k k-verified">Đã chạy thử, đúng</span></h4><p class="src">Lấy từ đâu</p><ul><li><span class="k k-verified">Đã chạy thử, đúng</span> eval: dừng sau 2 vòng <code>evals/f-review-loop/case.yaml</code> · bằng chứng <code>evals/RESULTS.md</code></li></ul></li></ol>
 </section></main>
 </div>
 <script type="module">
 // Clicks work before and without Mermaid: a blocked or hanging CDN leaves each chart as its source text.
-const toggle = (li, open) => { const b = li.querySelector("button"), ev = li.querySelector(".ev"); open ??= ev.hidden; ev.hidden = !open; b.setAttribute("aria-expanded", open) }
 window.showStep = (i, j) => {
   const li = document.getElementById("f" + i + "-s" + j)
   if (!li) return
-  toggle(li, true)
-  li.scrollIntoView({ block: "nearest" })
+  document.querySelectorAll(".step.hit").forEach((x) => x.classList.remove("hit"))
+  li.classList.add("hit")
+  li.scrollIntoView({ block: "start", behavior: "smooth" })
 }
 document.addEventListener("click", (ev) => {
   const open = ev.target.closest("[data-open]")
-  if (open) return openFlow(open.dataset.open)
-  const step = ev.target.closest(".steps > li > button")
-  if (step) toggle(step.parentElement)
+  if (open) openFlow(open.dataset.open)
 })
 const ready = import("https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs")
   .then(({ default: m }) => (m.initialize({ startOnLoad: false, securityLevel: "loose", theme: matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "default" }), m))

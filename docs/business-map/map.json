@@ -1,54 +1,62 @@
 {
   "version": 1,
-  "commit": "12f31ac34e2c18041f00f0e67224c80bee28d5bd",
+  "lang": "vi",
+  "title": "Bản đồ nghiệp vụ: plugin sdlc",
+  "commit": "fccb53e0921dac63edadfaf4b26eca50a49218f0",
   "actors": [
-    { "id": "agent", "name": "Coding agent" },
-    { "id": "lead", "name": "Tech lead (the user)" }
+    { "id": "agent", "name": "Agent viết code (Claude, Codex…)" },
+    { "id": "lead", "name": "Tech lead (người dùng)" }
   ],
   "flows": [
     {
       "id": "edit",
-      "name": "Agent edits a file in an opted-in repo",
+      "name": "Agent sửa một file",
+      "summary": "Mỗi lần agent sửa file trong repo đã bật sdlc, plugin chặn những sửa đổi sai luật trước khi chúng xảy ra và kiểm tra lại sau khi sửa. Kết quả cuối: lượt làm việc chỉ kết thúc khi lệnh verify của repo chạy xanh.",
       "actor": "agent",
       "kind": "flow",
       "steps": [
-        { "id": "session", "label": "Session starts and is told the repo follows sdlc", "next": ["guard"],
-          "evidence": [{ "file": "hooks/sdlc.mjs", "line": 506, "kind": "observed" }] },
-        { "id": "guard", "label": "Edit is checked before it happens", "next": ["protected", "skill", "edited"],
-          "evidence": [{ "file": "hooks/sdlc.mjs", "line": 191, "kind": "observed" }, { "file": "hooks/sdlc.test.mjs", "line": 30, "kind": "observed", "note": "protected path test" }] },
-        { "id": "protected", "label": "Refused: vendored file, secret or test in fix mode", "next": [],
-          "evidence": [{ "file": "hooks/sdlc.mjs", "line": 210, "kind": "observed" }, { "file": "hooks/sdlc.mjs", "line": 217, "kind": "observed", "note": "secret scan" }] },
-        { "id": "skill", "label": "Refused once: load the skill mapped to this code first", "next": ["guard"],
-          "evidence": [{ "file": "hooks/sdlc.mjs", "line": 233, "kind": "observed" }, { "file": "hooks/sdlc.test.mjs", "line": 534, "kind": "observed" }] },
-        { "id": "edited", "label": "File is written and its fast check runs", "next": ["stop"],
+        { "id": "session", "label": "Mở phiên làm việc, agent được báo repo này theo sdlc", "next": ["guard"],
+          "evidence": [{ "file": "hooks/sdlc.mjs", "line": 506, "kind": "observed", "note": "hook SessionStart in ra một dòng nhắc" }] },
+        { "id": "guard", "label": "Plugin kiểm tra sửa đổi trước khi cho ghi", "next": [
+            { "to": "protected", "when": "file bị khóa, có secret, hoặc là test khi đang sửa bug" },
+            { "to": "skill", "when": "file thuộc vùng có skill riêng mà agent chưa đọc" },
+            { "to": "edited", "when": "không vi phạm gì" }
+          ],
+          "evidence": [{ "file": "hooks/sdlc.mjs", "line": 191, "kind": "observed" }, { "file": "hooks/sdlc.test.mjs", "line": 30, "kind": "observed", "note": "test chặn file vendored" }] },
+        { "id": "protected", "label": "Bị từ chối, agent phải sửa cách khác", "next": [],
+          "evidence": [{ "file": "hooks/sdlc.mjs", "line": 210, "kind": "observed", "note": "file vendored/được bảo vệ" }, { "file": "hooks/sdlc.mjs", "line": 217, "kind": "observed", "note": "quét secret" }] },
+        { "id": "skill", "label": "Bị nhắc một lần: đọc skill của vùng code này trước", "next": [{ "to": "guard", "when": "agent đã đọc skill, hoặc thử lại" }],
+          "evidence": [{ "file": "hooks/sdlc.mjs", "line": 233, "kind": "observed" }, { "file": "hooks/sdlc.test.mjs", "line": 534, "kind": "observed", "note": "test: lần sau luôn được qua" }] },
+        { "id": "edited", "label": "File được ghi, chạy kiểm tra nhanh cho file đó", "next": ["stop"],
           "evidence": [{ "file": "hooks/sdlc.mjs", "line": 291, "kind": "observed" }] },
-        { "id": "stop", "label": "Turn ends: the repo's verify command must pass", "next": [],
-          "evidence": [{ "file": "hooks/sdlc.mjs", "line": 448, "kind": "observed" }, { "file": "hooks/sdlc.test.mjs", "line": 77, "kind": "observed" }] }
+        { "id": "stop", "label": "Kết thúc lượt: lệnh verify của repo phải xanh", "next": [],
+          "evidence": [{ "file": "hooks/sdlc.mjs", "line": 448, "kind": "observed" }, { "file": "hooks/sdlc.test.mjs", "line": 77, "kind": "observed", "note": "chặn tối đa 3 lần rồi chỉ cảnh báo" }] }
       ],
       "gaps": [
-        { "step": "skill", "type": "dependency", "text": "relies on Claude sending agent_id in subagents; no captured payload proves it" },
-        { "step": "stop", "type": "untested", "text": "a full npm test (~24 s) runs at every Stop; no measure of how often that delays the user" }
+        { "step": "skill", "type": "dependency", "text": "dựa vào việc Claude gửi agent_id trong subagent; chưa có payload thật nào chứng minh" },
+        { "step": "stop", "type": "untested", "text": "npm test (~24 giây) chạy ở mỗi lần dừng; chưa đo nó làm người dùng chờ bao nhiêu" }
       ]
     },
     {
       "id": "review",
-      "name": "Review loop of one change",
+      "name": "Vòng review của một thay đổi",
+      "summary": "Mỗi thay đổi có logic mới được một reviewer độc lập đọc, tối đa ba vòng. Kết quả cuối: thay đổi sạch, hoặc các lỗi còn mở được giao lại cho tech lead quyết.",
       "actor": "lead",
       "kind": "state",
       "steps": [
-        { "id": "r1", "label": "Full review (R1)", "next": ["fix1", "done"],
+        { "id": "r1", "label": "Review đầy đủ (vòng 1)", "next": [{ "to": "fix1", "when": "có lỗi phải sửa" }, { "to": "done", "when": "không còn lỗi" }],
           "evidence": [{ "file": "skills/sdlc/SKILL.md", "line": 82, "kind": "documented" }] },
-        { "id": "fix1", "label": "One fix pass, then scoped R2", "next": ["fix2", "done"],
+        { "id": "fix1", "label": "Sửa một lượt, review lại phần sửa (vòng 2)", "next": [{ "to": "fix2", "when": "vẫn còn lỗi" }, { "to": "done", "when": "hết lỗi" }],
           "evidence": [{ "file": "skills/sdlc/SKILL.md", "line": 91, "kind": "documented" }] },
-        { "id": "fix2", "label": "Last fix pass, then scoped R3", "next": ["handover", "done"],
+        { "id": "fix2", "label": "Sửa lượt cuối, review vòng 3", "next": [{ "to": "handover", "when": "vẫn còn lỗi" }, { "to": "done", "when": "hết lỗi" }],
           "evidence": [{ "file": "skills/sdlc/SKILL.md", "line": 93, "kind": "documented" }] },
-        { "id": "handover", "label": "Open findings handed to the lead", "next": [],
-          "evidence": [{ "file": "skills/sdlc/SKILL.md", "line": 94, "kind": "documented" }, { "file": "evals/i-review-stuck/case.yaml", "kind": "verified", "proof": "evals/RESULTS.md" }] },
-        { "id": "done", "label": "Clean: report and debt", "next": [],
-          "evidence": [{ "file": "evals/f-review-loop/case.yaml", "kind": "verified", "proof": "evals/RESULTS.md" }] }
+        { "id": "handover", "label": "Giao lỗi còn mở cho tech lead", "next": [],
+          "evidence": [{ "file": "skills/sdlc/SKILL.md", "line": 94, "kind": "documented" }, { "file": "evals/i-review-stuck/case.yaml", "kind": "verified", "proof": "evals/RESULTS.md", "note": "eval: agent dừng và bàn giao, 3/3 lần" }] },
+        { "id": "done", "label": "Sạch: báo cáo và ghi nợ kỹ thuật", "next": [],
+          "evidence": [{ "file": "evals/f-review-loop/case.yaml", "kind": "verified", "proof": "evals/RESULTS.md", "note": "eval: dừng sau 2 vòng" }] }
       ],
       "gaps": [
-        { "type": "transition", "text": "nothing but the skill's prose stops a fourth round; no hook counts rounds" }
+        { "type": "transition", "text": "chỉ có lời dặn trong skill ngăn vòng thứ tư; không hook nào đếm số vòng" }
       ]
     }
   ]

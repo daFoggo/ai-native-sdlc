@@ -18,16 +18,27 @@ names none). You write only the JSON; `node <this skill dir>/scripts/render.mjs 
 ```json
 {
   "version": 1,
+  "lang": "vi",
+  "title": "Bản đồ nghiệp vụ: <product>",
   "commit": "<git rev-parse HEAD when you built it>",
-  "actors": [{ "id": "buyer", "name": "Buyer" }],
+  "actors": [{ "id": "buyer", "name": "Người mua" }],
   "flows": [{
-    "id": "checkout", "name": "Checkout", "actor": "buyer", "kind": "flow",
-    "steps": [{ "id": "pay", "label": "Buyer pays", "next": ["receipt"],
-      "evidence": [{ "file": "app/api/pay.ts", "line": 42, "kind": "observed", "note": "rejects a total of 0" }] }],
-    "gaps": [{ "step": "pay", "type": "error-path", "text": "a declined card has no screen" }]
+    "id": "checkout", "name": "Thanh toán", "actor": "buyer", "kind": "flow",
+    "summary": "Người mua trả tiền cho giỏ hàng. Kết quả cuối: đơn đã thanh toán và có biên nhận.",
+    "steps": [{ "id": "pay", "label": "Người mua trả tiền",
+      "next": [{ "to": "receipt", "when": "thẻ được chấp nhận" }, { "to": "declined", "when": "thẻ bị từ chối" }],
+      "evidence": [{ "file": "app/api/pay.ts", "line": 42, "kind": "observed", "note": "từ chối tổng tiền bằng 0" }] }],
+    "gaps": [{ "step": "pay", "type": "error-path", "text": "thẻ bị từ chối không có màn hình nào" }]
   }]
 }
 ```
+
+Write for a reader who has never seen the code. `lang` (`vi` or `en`, default `en`) sets the page's own words:
+pick the language the repo's BA and testers read (its docs and tickets tell you), and write every label, summary,
+condition and note in it. `title` names the page (the product), else it is the language's default ("Business map", "Bản đồ nghiệp vụ"). Each flow's `summary` says in one or two sentences
+what the flow is for and what it ends with. Every branch (a step with more than one `next`) names its condition in
+`when`; an arrow without one is read as "always". A label is what happens, in the reader's words, not a function
+name. A `note` on evidence says in a few words what that source shows; the file and line come after it.
 
 - `kind` of a flow: `flow` (steps in order) or `state` (an object whose status changes: an order, an application, an
   approval; steps are its states, `next` its transitions).

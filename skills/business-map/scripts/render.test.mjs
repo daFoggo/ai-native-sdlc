@@ -8,6 +8,9 @@ import { fileURLToPath } from "node:url"
 
 import { render, validate } from "./render.mjs"
 
+// What the browser reads from the page: the Mermaid source is HTML-escaped inside <pre>.
+const text = (h) => h.replace(/&gt;/g, ">").replace(/&lt;/g, "<").replace(/&quot;/g, "\"").replace(/&#39;/g, "'").replace(/&amp;/g, "&")
+
 const SCRIPT = fileURLToPath(new URL("./render.mjs", import.meta.url))
 
 const map = () => ({
@@ -89,6 +92,45 @@ test("R1-2: validate reports wrong shapes instead of throwing or passing", () =>
   const e = map()
   e.flows[0].steps[0].evidence = "app/pay.ts"
   assert.match(validate(e).join("\n"), /evidence must be a list/)
+})
+
+test("readable: how-to-read, summary, conditions on arrows, confidence colors, attention first", () => {
+  const m = map()
+  m.flows[0].summary = "Buyer pays and gets a receipt"
+  m.flows[0].steps[0].next = [{ to: "done", when: "card accepted" }]
+  const html = render(m)
+  assert.match(html, /How to read this map/)
+  assert.match(html, /Buyer pays and gets a receipt/)
+  assert.match(text(html), /s0 -->\|"card accepted"\| s1/)
+  assert.match(html, /class s0 observed/) // node colored by its strongest evidence
+  assert.match(html, /class s1 documented/)
+  assert.ok(html.indexOf("Needs attention") < html.indexOf('<pre class="mermaid">')) // gaps before the chart
+  assert.match(html, /⚠ Paid/) // a step with a gap is marked on the chart
+  assert.doesNotMatch(html, /<div class="ev" hidden>/) // evidence is visible without clicking
+  assert.match(html, /Built from commit abc1234/)
+})
+
+test("readable: Vietnamese page when the map says lang vi; conditions on state arrows", () => {
+  const m = map()
+  m.lang = "vi"
+  m.flows[1].steps[0].next = [{ to: "closed", when: "đã giao: xong" }]
+  const html = render(m)
+  assert.match(html, /<html lang="vi">/)
+  assert.match(html, /Cách đọc bản đồ/)
+  assert.match(html, /Đã thấy trong code/)
+  assert.match(text(html), /s0 --> s1 : đã giao#58; xong/)
+  assert.match(validate({ ...map(), lang: "fr" }).join("\n"), /lang fr/)
+  const bad = map()
+  bad.flows[0].steps[0].next = [{ when: "x" }]
+  assert.match(validate(bad).join("\n"), /next undefined is not a step/)
+})
+
+test("readable R1: the map's title names the page; an inherited name is not a language", () => {
+  const html = render({ ...map(), title: "Shop <map>" })
+  assert.match(html, /<title>Shop &lt;map&gt;<\/title>/)
+  assert.match(html, /<h1>Shop &lt;map&gt;<\/h1>/)
+  assert.match(render(map()), /<title>Business map<\/title>/)
+  assert.match(validate({ ...map(), lang: "constructor" }).join("\n"), /lang constructor/)
 })
 
 test("R2-1: a null inside evidence, gaps or actors is a listed problem, not a render crash", () => {
