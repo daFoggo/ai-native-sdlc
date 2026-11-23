@@ -13,6 +13,8 @@ const SCRIPT = fileURLToPath(new URL("./sdlc.mjs", import.meta.url))
 // Every repo of this run lives under one folder, removed at the end, so parent-folder tests see only their own.
 const BASE = mkdtempSync(join(tmpdir(), "sdlc-suite-"))
 after(() => rmSync(BASE, { recursive: true, force: true }))
+// Calls without a session_id share this file across runs; start each run from none so seen state never carries over.
+rmSync(join(tmpdir(), "sdlc-seen-nosession.json"), { force: true })
 
 function repo(config, dir = ".claude", parent = BASE) {
   const root = mkdtempSync(join(parent, "repo-"))

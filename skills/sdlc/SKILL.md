@@ -82,9 +82,11 @@ not, new files included) and the rule cards that bind it.
 1. **R1, full.** Dispatch the reviewer with the package path (one per repo the change touches), the spec and plan
    paths, `mode: full`, and nothing else: no summary of the change and no claims about the environment ("no CDN in
    front", "only one caller"). A claim you hand over is taken as checked; an assumption belongs in the spec's
-   **Areas of concern**, where the reviewer tests it.
+   **Areas of concern**, where the reviewer tests it. Lane M keeps its spec in chat: write its restatement and
+   requirements as `spec.md` in the lane M folder (the one that holds `review.md`) and pass that path.
 2. Sort the findings yourself: **Must fix** and **Should fix** enter ONE fix pass, all together; each fix gets a
-   test that failed first. **Minor** goes to the debt list, never into the loop. A finding you reject is a
+   test that failed first. A fix covers every place the finding's pattern occurs, not only the lines the reviewer
+   cited, and its test covers the pattern: fixing the examples leaves the sibling for the next round. **Minor** goes to the debt list, never into the loop. A finding you reject is a
    ruling: `Ruling: <finding> — <why> — <cost if wrong>`. Save the report, your rulings and each repo's
    `<base>` and `Snapshot:` to `review.md` in the change's artifact folder (lane M: `<artifacts>/<date>-<slug>/`
    too, created for it), and update it after each round: a compaction keeps files, not the findings in chat.

@@ -25,3 +25,12 @@ Kind: plugin (this repo), superpowers, ponytail, session (the agent's own habits
 | 19 | ponytail | ponytail injects its full skill (~3.5 KB, ultra: "question the request", "lazy") into every subagent through SubagentStart, the sdlc reviewer included; reports came back with "Ponytail note" lines. | ~900 tokens per subagent and a "do less" bias in a role that must be strict | Set `PONYTAIL_SUBAGENT_MATCHER` to skip `sdlc:reviewer` (user settings; ponytail then reads stdin, which it warns can stall on Windows: test first) |
 | 20 | plugin (new) | The first business map page was correct but unreadable for its audience: English jargon, no legend in plain words, conditions missing on branches, sources hidden behind clicks. Tests and two reviews passed it. | The feature missed its purpose | Fixed in the readable-map change; the skill now says who the reader is and requires `summary`, `when` and plain labels |
 | 5 | session | Listing the pstack tree and a skill set dumped two ~35 KB tool outputs into context. | ~20k tokens | Not a plugin bug; scope reads to the paths needed |
+
+## Status (2026-11-23)
+- Fixed: 1, 6, 11 (0.4.11); 8, 13, 15, 16 (0.5.0); 20 (readable map); 2 (README dev loop), 10 (tests start from no
+  shared seen file), 17 (a fix covers the finding's pattern), 18 (lane M passes a spec file) in the follow-up commit.
+- Measured, no change: 4. Startup injections are small (using-superpowers ~3.2 KB, ponytail ~3.5 KB, sdlc ~0.5 KB);
+  the large startup cost is the listing of ~100 skills, which is also why skills get skipped. Per-repo
+  `enabledPlugins` that turn off unrelated plugins (mobile skills in a web repo) cut both.
+- Open: 7 (writing-plans defaults), 9 (verify ~24 s per Stop), 12 (R1 cost), 19 (ponytail inside the reviewer:
+  needs the owner's settings).

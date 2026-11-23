@@ -87,7 +87,7 @@ Must and Should findings were fixed in 0.4.0. Minor ones, kept here:
 - [x] Change 2: `business-map` skill and the review package's "flows touched" section (0.5.0).
 - [ ] review-package reads sdlc.json without `sdlc.local.json` (a near-copy of the hooks' `loadConfig`); a non-string `map` crashes it. Move `loadConfig` next to `matchingRules` and import it in the hooks.
 - [ ] The package reads the business map from the working tree, also for an older `<base> <head>` range.
-- [ ] Friction items still open in `docs/work/2026-11-23-skill-routing/friction.md`: 2 (dev loop runs the cached hook), 4 (startup context size), 7 (writing-plans defaults), 9 (verify ~24 s at every Stop), 10 (tests share a seen file), 12 (R1 cost), 17 (fix the class, not the cited case).
+- [ ] Friction items still open in `docs/work/2026-11-23-skill-routing/friction.md` (see its Status): 7, 9, 12, 19.
 
 ## Rollout
 

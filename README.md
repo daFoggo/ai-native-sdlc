@@ -127,4 +127,10 @@ Latest numbers are in [evals/RESULTS.md](evals/RESULTS.md) (raw runs stay local 
 npm test
 ```
 
+This repo follows its own process (`.claude/sdlc.json`): `npm test` is the verify command, and
+`docs/business-map/` maps the plugin's flows (`python -m http.server 8765 --directory docs/business-map` to view it).
+The hooks a session runs come from the installed plugin cache, not this checkout, so a hook change is live only after
+reinstalling. Until then, run the checkout's hook by hand with a payload:
+`echo '{"tool_name":"Edit","tool_input":{"file_path":"<abs path>"},"cwd":"<repo>","session_id":"dev"}' | node hooks/sdlc.mjs guard`.
+
 MIT license.
