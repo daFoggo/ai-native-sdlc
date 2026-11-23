@@ -3,6 +3,8 @@
 // rule cards whose `paths:` match a changed file, so a reviewer on any agent host gets them.
 //   node review-package.mjs <base> [head]              run inside the repo; prints the file path. Without head: base
 //                                                      to the working tree, uncommitted and untracked files included
+//   node review-package.mjs --snapshot                  prints a commit of the working tree as it is now: the <base>
+//                                                      for a change that starts on a dirty tree
 //   node review-package.mjs <base> --since <snapshot>  the fix only: what changed since the snapshot an earlier
 //                                                      package printed (scoped R2/R3), so a re-review never re-reads
 //                                                      the whole change
@@ -65,11 +67,14 @@ function main() {
   const at = args.indexOf("--since")
   const since = at >= 0 ? args.splice(at, 2)[1] : null
   const [base, head] = args
-  if (!base || (at >= 0 && !since)) throw new Error("usage: review-package.mjs <base> [head] | <base> --since <snapshot>")
   const git = (opts, ...a) =>
     execFileSync("git", ["-c", "user.name=sdlc", "-c", "user.email=sdlc@localhost", ...a], { encoding: "utf8", maxBuffer: 256 << 20, ...opts })
   const root = git({}, "rev-parse", "--show-toplevel").trim()
   const run = (...a) => git({ cwd: root }, ...a)
+  // The start of a change on a tree that is already dirty: the review base must hold that work, or the package
+  // reviews it again as part of this change.
+  if (base === "--snapshot") return console.log(snapshot((o, ...a) => git({ cwd: root, ...o }, ...a), root))
+  if (!base || (at >= 0 && !since)) throw new Error("usage: review-package.mjs <base> [head] | <base> --since <snapshot> | --snapshot")
   // Always a commit: the working tree becomes one, so new files need no special case and the next round can diff from it.
   const to = head ? run("rev-parse", "--verify", `${head}^{commit}`).trim() : snapshot((o, ...a) => git({ cwd: root, ...o }, ...a), root)
   const from = since ?? base

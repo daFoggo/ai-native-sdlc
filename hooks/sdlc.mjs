@@ -41,7 +41,11 @@ export function findRoot(start) {
 export function loadConfig(root) {
   const dir = configDir(root)
   const read = (f) => (existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : {})
-  return { ...read(join(dir, "sdlc.json")), ...read(join(dir, "sdlc.local.json")) }
+  const shared = read(join(dir, "sdlc.json"))
+  const local = read(join(dir, "sdlc.local.json"))
+  // Lists add up (a machine adds a ban or a PATH entry without copying the team's); other values are overridden.
+  for (const [k, v] of Object.entries(local)) shared[k] = Array.isArray(v) && Array.isArray(shared[k]) ? [...shared[k], ...v] : v
+  return shared
 }
 
 const matches = (rel, globs) => [globs].flat().some((g) => matchesGlob(rel, g))
@@ -267,10 +271,22 @@ export function check(input, { rules = false } = {}) {
 const MAX_BASH_FILES = 20 // a codegen, install or big subagent task touching more is left to verify
 const bashMark = (e) => join(tmpdir(), `sdlc-bash-${e.session}-${e.toolUse}`)
 
+const sha = (abs) => createHash("sha1").update(readFileSync(abs)).digest("hex")
+
 export function markBash(input) {
   const e = normalize(input)
   const roots = shellRoots(e.cwd, e.command)
-  if (roots.length) writeFileSync(bashMark(e), JSON.stringify({ since: Date.now(), heads: Object.fromEntries(roots.map((r) => [r, headOf(r)])) }))
+  if (!roots.length) return
+  // Content of protected and test files already dirty: a command that only rewrites them unchanged (a check script
+  // that saves in place) bumps their mtime, and must not be reported as changing them.
+  const hashes = {}
+  for (const r of roots)
+    try {
+      const c = loadConfig(r)
+      const globs = [...(c.protect ?? []).map((p) => p.glob), ...[c.tests ?? []].flat()]
+      if (globs.length) for (const f of changedSince(r, 0).files) if (matches(posixRelative(r, f), globs)) hashes[f] = sha(f)
+    } catch {} // not a git repo
+  writeFileSync(bashMark(e), JSON.stringify({ since: Date.now(), heads: Object.fromEntries(roots.map((r) => [r, headOf(r)])), hashes }))
 }
 
 // Dirty files (tracked or untracked) under root modified at or after `since`, and every deleted path.
@@ -325,12 +341,15 @@ export function bashCheck(input, mark, { rules = false } = {}) {
     markTouched(e.session, root)
     const config = loadConfig(root)
     // Protect and fix mode look at every path; a guard cannot see inside a shell command, so this is after the fact.
-    for (const rel of touched.map((f) => posixRelative(root, f))) {
-      const p = (config.protect ?? []).find((x) => matches(rel, x.glob))
+    const unchanged = (f) => mark.hashes?.[f] !== undefined && existsSync(f) && sha(f) === mark.hashes[f]
+    const changedRels = touched.filter((f) => !unchanged(f)).map((f) => posixRelative(root, f))
+    for (const rel of changedRels) {
+      // `via`: the command the repo sanctions for writing there (a vendored set's own update script).
+      const p = (config.protect ?? []).find((x) => matches(rel, x.glob) && !(x.via && e.command && new RegExp(x.via).test(e.command)))
       if (p) msgs.push(`${rel} is protected: ${p.reason}. This command changed or removed it; restore it with \`git checkout ${before ?? "HEAD"} -- ${rel}\`.`)
     }
     if (existsSync(fixFlag(root))) {
-      const tests = touched.map((f) => posixRelative(root, f)).filter((r) => matches(r, config.tests ?? []))
+      const tests = changedRels.filter((r) => matches(r, config.tests ?? []))
       if (tests.length)
         msgs.push(`Fix mode: this command changed tests (${tests.join(", ")}). Restore them with \`git checkout -- <file>\` and fix the code instead, or ask the user if a test is wrong.`)
     }

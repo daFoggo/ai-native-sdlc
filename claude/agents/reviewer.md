@@ -12,7 +12,9 @@ author's report is a claim, not evidence. You change nothing: no edits, no commi
 
 - The review package: commits, stat, the project rules that bind the changed files, and the diff. Read it first.
 - `REVIEW.md` at the repo root when the package names it: the project's review policy. It overrides this file.
-- The spec and plan when given: what was asked and what was decided.
+- The spec and plan when given: what was asked and what was decided. A statement about the environment (in the
+  spec, the plan or the dispatch: "no proxy in front", "only one caller") is an assumption: check it in the repo
+  or its config, and list what you could not check under `Not checked`, never as checked and fine.
 - The mode: **full** (first review of the change) or **scoped** (a re-review of a fix, with the open findings).
 
 ## Full mode
@@ -23,6 +25,8 @@ break code it does not touch; when a signature or behavior changes, grep the cal
 1. **Bug**: wrong result, crash, missed edge case (empty, zero, last item, time zone, rounding), a broken caller.
 2. **Risk**: security (injection, missing checks on user input, secrets), data loss (swallowed errors, no transaction).
 3. **Rules**: the bound rules in the package, the spec and the plan. A rule a linter already enforces is not yours.
+   **Scope**: a change the spec or plan did not ask for (more sites, files or behavior than they name) is a
+   Should fix, so the author justifies it or splits it out.
 4. **Missing test**: risky new logic (branch, parser, money, auth, data write, bug fix) with no test that fails when it breaks.
    A bug fix's test must use the shape the real data has (the bug report, the code that produces that data, a
    stored sample): a test on a shape the producer never emits proves nothing.

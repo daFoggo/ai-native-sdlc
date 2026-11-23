@@ -491,3 +491,27 @@ test("shell rules follow cd into another repo", () => {
   assert.match(bash(`git -C "../${name}" status; npm install`), /pnpm only/)
   assert.equal(bash("npm install"), null) // this repo allows it
 })
+
+test("sdlc.local.json adds to the team's lists and overrides other values", () => {
+  const root = repo({ denyBash: [{ pattern: "npm install", reason: "pnpm only" }], verify: "a" })
+  writeFileSync(join(root, ".claude", "sdlc.local.json"), JSON.stringify({ denyBash: [{ pattern: "yarn", reason: "no yarn" }], verify: "b" }))
+  const bash = (command) => reason(guard({ tool_name: "Bash", tool_input: { command }, cwd: root }))
+  assert.match(bash("npm install"), /pnpm only/)
+  assert.match(bash("yarn add x"), /no yarn/)
+})
+
+test("protect: an unchanged rewrite and the sanctioned command are not reported; a real change is", () => {
+  const root = repo({ protect: [{ glob: "vendor/**", reason: "vendored", via: "pnpm hairline" }] })
+  mkdirSync(join(root, "vendor"))
+  writeFileSync(join(root, "vendor/x.ts"), "mine") // already dirty before the command
+  const run = (command, write) => {
+    const call = { session_id: `h${process.pid}${Date.now()}`, tool_use_id: `b${Math.random()}`, tool_name: "Bash", tool_input: { command }, cwd: root }
+    const hook = (mode) => spawnSync("node", [SCRIPT, mode], { input: JSON.stringify(call), encoding: "utf8" }).stdout
+    hook("guard")
+    write()
+    return hook("bash")
+  }
+  assert.doesNotMatch(run("node patch.mjs --check", () => writeFileSync(join(root, "vendor/x.ts"), "mine")), /protected/)
+  assert.doesNotMatch(run("pnpm hairline", () => writeFileSync(join(root, "vendor/x.ts"), "upstream")), /protected/)
+  assert.match(run("sed -i s/a/b/ vendor/x.ts", () => writeFileSync(join(root, "vendor/x.ts"), "edited")), /vendor\/x\.ts is protected/)
+})

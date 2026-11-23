@@ -20,7 +20,9 @@ below), so a skill can be swapped by editing one line. It works the same on ever
 | **L** | Several modules, a new subsystem, or any `riskyPaths` from sdlc.json (auth, money, migrations) | intent → spec → plan, each saved and approved → build → verify → review loop |
 
 Say the lane in one line with the reason; the user can override. If the work grows, step up a lane and say so.
-Note the commit you start from (`git rev-parse HEAD`): it is the review's `<base>`.
+Note where you start, per repo the change touches: `git rev-parse HEAD` on a clean tree; on a dirty one
+`node <this skill dir>/scripts/review-package.mjs --snapshot`, so work already there stays out of the review. It is
+the review's `<base>`.
 
 Size never skips review. A change with new logic (a branch, a computation, a parser, a data write) is lane M or L
 however short it is, and lanes M and L always get R1; "too small for a reviewer" means it was lane S, which holds
@@ -73,10 +75,15 @@ a host with no subagents gets the same file in a new session. Package the change
 `node <this skill dir>/scripts/review-package.mjs <base>` prints a file with everything since `<base>` (committed or
 not, new files included) and the rule cards that bind it.
 
-1. **R1, full.** Dispatch the reviewer with the package path, the spec and plan paths, `mode: full`.
+1. **R1, full.** Dispatch the reviewer with the package path (one per repo the change touches), the spec and plan
+   paths, `mode: full`, and nothing else: no summary of the change and no claims about the environment ("no CDN in
+   front", "only one caller"). A claim you hand over is taken as checked; an assumption belongs in the spec's
+   **Areas of concern**, where the reviewer tests it.
 2. Sort the findings yourself: **Must fix** and **Should fix** enter ONE fix pass, all together; each fix gets a
    test that failed first. **Minor** goes to the debt list, never into the loop. A finding you reject is a
-   ruling: `Ruling: <finding> — <why> — <cost if wrong>`.
+   ruling: `Ruling: <finding> — <why> — <cost if wrong>`. Save the report, your rulings and each repo's
+   `<base>` and `Snapshot:` to `review.md` in the change's artifact folder (lane M: `<artifacts>/<date>-<slug>/`
+   too, created for it), and update it after each round: a compaction keeps files, not the findings in chat.
 3. **R2, scoped.** Package the fix only: `review-package.mjs <base> --since <snapshot>`, where `<snapshot>` is the
    `Snapshot:` line of the R1 package. Dispatch with `mode: scoped`, that package and the open findings only.
 4. Still open after R2: one more fix pass, then **R3, scoped**, the last one, packaged `--since` the R2 snapshot.

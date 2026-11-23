@@ -90,3 +90,18 @@ test("a head given by name prints its sha, and a huge non-ASCII file is still le
   assert.match(p, /Not inlined[^\n]*\né\.json/)
   assert.doesNotMatch(p.split("## Diff")[1], /^\+x$/m)
 })
+
+test("--snapshot as base: work already dirty at the start stays out of the package", () => {
+  const root = mkdtempSync(join(tmpdir(), "sdlc-pkg-"))
+  const git = (...a) => execFileSync("git", ["-c", "user.email=e@x", "-c", "user.name=e", ...a], { cwd: root, encoding: "utf8" })
+  git("init", "-q")
+  writeFileSync(join(root, "a.ts"), "export const a = 1\n")
+  git("add", "-A"); git("commit", "-qm", "init")
+  writeFileSync(join(root, "old.ts"), "export const leftover = 1\n") // someone's uncommitted work
+  const base = execFileSync("node", [SCRIPT, "--snapshot"], { cwd: root, encoding: "utf8" }).trim()
+  assert.match(base, /^[0-9a-f]{40}$/)
+  writeFileSync(join(root, "a.ts"), "export const a = 2\n") // this change
+  const p = readFileSync(execFileSync("node", [SCRIPT, base], { cwd: root, encoding: "utf8" }).trim(), "utf8")
+  assert.match(p, /\+export const a = 2/)
+  assert.doesNotMatch(p, /leftover/)
+})

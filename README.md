@@ -68,7 +68,7 @@ have new names, a line in `EDIT_TOOLS`/`SHELL_TOOLS`. Capture a real payload wit
 {
   "verify": "pnpm check",
   "check": [{ "glob": "apps/web/**/*.{ts,tsx}", "cwd": "apps/web", "run": "pnpm exec eslint --max-warnings 0 {file}" }],
-  "protect": [{ "glob": "packages/ui/src/components/ui/**", "reason": "vendored shadcn: change tokens or props" }],
+  "protect": [{ "glob": "packages/ui/src/components/ui/**", "reason": "vendored shadcn: change tokens or props", "via": "shadcn(@\\S+)? add" }],
   "denyBash": [{ "pattern": "npm install", "reason": "this repo uses pnpm" }],
   "approve": [{ "glob": "db/migrations/**", "reason": "migrations need a change ticket from the DBA" }],
   "tests": ["**/*.test.{ts,tsx}"],
@@ -83,8 +83,13 @@ that names that type, so the choice holds on every machine instead of depending 
 Without a map, only one floor applies: `sdlc:reviewer` never runs on `haiku`. The same hook refuses
 `superpowers:subagent-driven-development` unless `providers.build` names it.
 
-`sdlc.local.json` beside it (gitignored) overrides it per machine, for example `"pathPrepend": ["~/.local/node/bin"]`.
-In a folder that holds several repos, the Stop hook verifies each child repo that has its own `sdlc.json`. Secret
+`sdlc.local.json` beside it (gitignored) adjusts it per machine: lists add to the team's (`"pathPrepend":
+["~/.local/node/bin"]`, an extra ban), other values replace them. `pathPrepend` reaches only the hooks' own
+commands, not the agent's shell. A `protect` entry's optional `via` is a pattern for the shell command allowed to
+write there (the vendored set's update script); a command that rewrites a protected file unchanged is not reported.
+`approve` asks a person even when the session runs with permission prompts bypassed: it is the human gate.
+In a folder that holds several repos, the Stop hook verifies each child repo with its own `sdlc.json` that the
+session changed. Secret
 scanning (keys and tokens written into tracked files) is on unless `"secrets": false`.
 
 ## Evals
