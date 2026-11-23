@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { execFileSync } from "node:child_process"
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { test } from "node:test"
@@ -179,4 +179,30 @@ test("a non-string map in sdlc.json does not crash the package", () => {
   mkdirSync(join(root, ".claude"))
   writeFileSync(join(root, ".claude/sdlc.json"), JSON.stringify({ map: { dir: "x" } }))
   assert.match(readFileSync(execFileSync("node", [SCRIPT, base], { cwd: root, encoding: "utf8" }).trim(), "utf8"), /## Stat/)
+})
+
+test("a <base> <head> package reads the map and evidence as they were at head, not the working tree", () => {
+  const root = mkdtempSync(join(tmpdir(), "sdlc-pkg-"))
+  const git = (...a) => execFileSync("git", ["-c", "user.email=e@x", "-c", "user.name=e", ...a], { cwd: root, encoding: "utf8" })
+  git("init", "-q")
+  mkdirSync(join(root, "app"))
+  mkdirSync(join(root, ".claude"))
+  mkdirSync(join(root, "docs/map"), { recursive: true })
+  writeFileSync(join(root, ".claude/sdlc.json"), JSON.stringify({ map: "./docs\\map/", artifacts: "./docs/work" }))
+  writeFileSync(join(root, "app/pay.ts"), "1\n")
+  writeFileSync(join(root, "app/gone.ts"), "1\n")
+  writeFileSync(join(root, "docs/map/map.json"), JSON.stringify(bmap))
+  git("add", "-A"); git("commit", "-qm", "init")
+  const base = git("rev-parse", "HEAD").trim()
+  writeFileSync(join(root, "app/pay.ts"), "2\n")
+  mkdirSync(join(root, "docs/work/x"), { recursive: true })
+  writeFileSync(join(root, "docs/work/x/spec.md"), "SPEC BODY\n")
+  git("add", "-A"); git("commit", "-qm", "pay")
+  // After head: the map is emptied and gone.ts deleted, uncommitted. A package of base..HEAD must not see either.
+  writeFileSync(join(root, "docs/map/map.json"), JSON.stringify({ flows: [] }))
+  rmSync(join(root, "app/gone.ts"))
+  const p = readFileSync(execFileSync("node", [SCRIPT, base, "HEAD"], { cwd: root, encoding: "utf8" }).trim(), "utf8")
+  assert.match(p, /## Flows touched[^\n]*\n- Checkout › Pay/)
+  assert.doesNotMatch(p, /app\/gone\.ts/)
+  assert.doesNotMatch(p, /SPEC BODY/) // `./docs/work` in sdlc.json still lists artifacts instead of inlining them
 })

@@ -122,12 +122,15 @@ function main() {
   const rules = matchingRules(root, files)
   const review = existsSync(join(root, "REVIEW.md")) ? "REVIEW.md (read it first)" : "none (no REVIEW.md)"
   const config = loadConfig(root)
-  const map = typeof config.map === "string" ? config.map.replace(/\/+$/, "") : null
+  // As git spells repo paths: `./docs\map/` in sdlc.json is `docs/map`.
+  const gitPath = (p) => p.replaceAll("\\", "/").replace(/^(\.\/)+/, "").replace(/\/+$/, "")
+  const map = typeof config.map === "string" ? gitPath(config.map) : null
   // The change's own intent/spec/plan reach the reviewer by path; inlining them here pays for them twice.
-  const artifacts = `${String(config.artifacts ?? "docs/work").replace(/\/+$/, "")}/`
+  const artifacts = `${gitPath(String(config.artifacts ?? "docs/work"))}/`
   const docs = files.filter((f) => f.startsWith(artifacts) || (map && f === `${map}/index.html`)) // rendered from map.json
-  const mapFile = map && join(root, map, "map.json")
-  const flows = mapFile && existsSync(mapFile) ? touchedFlows(JSON.parse(readFileSync(mapFile, "utf8")), files, (f) => existsSync(join(root, f))) : null
+  // The map and its evidence as they are at `to` (the head, or the snapshot of the working tree), not on disk now.
+  const atTo = map ? new Set(run("ls-tree", "-r", "--name-only", "-z", to).split("\0").filter(Boolean)) : null
+  const flows = map && atTo.has(`${map}/map.json`) ? touchedFlows(JSON.parse(run("show", `${to}:${map}/map.json`)), files, (f) => atTo.has(f)) : null
   const diff = run("diff", CONTEXT, range, "--", ".", ...[...big, ...docs].map((f) => `:(exclude,literal)${f}`))
   const parts = [
     `# Review package ${since ? `fix since ${since.slice(0, 9)}` : head ? range : `${base.slice(0, 9)}..working tree`}`,

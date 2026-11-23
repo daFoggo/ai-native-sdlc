@@ -444,6 +444,9 @@ export function verify(input, stateFile = stateFileFor(normalize(input).session)
     const config = loadConfig(root)
     if (!config.verify) continue
     const s = (state[root] ??= { blocks: 0, base: headOf(root) })
+    // The cap is per user turn: a Stop the host marks as not hook-driven starts a new one. Hosts that send no flag
+    // keep one cap per session, so a missing field can never make the block loop endless.
+    if (input.stop_hook_active === false) s.blocks = 0
     // A repo this session never changed is not this turn's to verify (start marks the repos it tracks; a host
     // without a start hook keeps verifying every changed repo). Cleared first, so edits during verify count again.
     const mark = touchedFile(session, root)

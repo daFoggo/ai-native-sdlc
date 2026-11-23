@@ -96,6 +96,9 @@ test("verify blocks once per tree state, skips a green or clean tree, and stops 
     const r = stop()
     assert.equal(r.block.length, 0)
     assert.equal(r.warn.length, 1) // fourth failure: warn, never block forever
+    // A new user turn (the host says this Stop is not a hook-driven continuation) gets its three blocks back.
+    writeFileSync(join(root, "broken"), "5")
+    assert.equal(verify({ cwd: root, stop_hook_active: false }, state).block.length, 1)
   } finally {
     delete process.env.CLAUDE_PROJECT_DIR
   }
@@ -596,3 +599,4 @@ test("skill routing: a skill loaded in one session does not open the gate in ano
   const other = guard({ tool_name: "Edit", tool_input: { file_path: join(r.root, "app/page.tsx"), old_string: "a", new_string: "b" }, cwd: r.root, session_id: `skills-other-${process.pid}-${Date.now()}` })
   assert.match(JSON.stringify(other), /vercel-react-best-practices/)
 })
+
