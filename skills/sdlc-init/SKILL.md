@@ -46,6 +46,10 @@ one runs for dozens of turns.
    - `protect` for vendored or generated paths, `denyBash` for commands the docs forbid, `approve` for the paths and
      commands that need a named person (migrations, infra, production deploys), `tests` globs for fix mode,
      `riskyPaths` that force lane L. Secret scanning is on unless `"secrets": false`.
+   - `skills` maps code paths to the skills the repo installs for them (`{ "glob": "apps/**/*.tsx", "skill":
+     "vercel-react-best-practices" }`): the guard refuses the first edit of a matching file once until the agent
+     loads that skill. Map only skills the model can invoke (no `disable-model-invocation: true`; those are
+     refused by the host), and only where the skill's own description names that code.
    - Machine-only values (a PATH prefix such as `"pathPrepend": ["~/.local/node/bin"]`) go in
      `sdlc.local.json` beside it, gitignored.
 6. **`REVIEW.md`** at the root from `../sdlc/templates/REVIEW.md`, with the repo's vendored paths and what its

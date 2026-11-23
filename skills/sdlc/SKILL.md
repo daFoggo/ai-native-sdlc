@@ -19,7 +19,9 @@ below), so a skill can be swapped by editing one line. It works the same on ever
 | **M** | A feature or fix inside one area | Short spec and plan in chat → build → verify → review loop (R1 always) |
 | **L** | Several modules, a new subsystem, or any `riskyPaths` from sdlc.json (auth, money, migrations) | intent → spec → plan, each saved and approved → build → verify → review loop |
 
-Say the lane in one line with the reason; the user can override. If the work grows, step up a lane and say so.
+Lanes M and L start by restating the request in four lines at most: the goal, the problem it solves, the
+assumptions not yet confirmed, and only the questions whose answer would change the direction (lane L: this is the
+start of `intent.md`; when the intent provider runs, its playback is this restatement, not a second one). Say the lane in one line with the reason; the user can override. If the work grows, step up a lane and say so.
 Note where you start, per repo the change touches: `git rev-parse HEAD` on a clean tree; on a dirty one
 `node <this skill dir>/scripts/review-package.mjs --snapshot`, so work already there stays out of the review. It is
 the review's `<base>`.
@@ -131,7 +133,9 @@ and save what it produces in the artifact's place (its design doc becomes `spec.
 sdlc rules above still bind it: the lanes, the test policy, the review cap. A provider that asks the user
 questions one by one (brainstorming) is the one exception when the user said up front they will not answer:
 then write intent and spec inline and say so. The exception covers only that provider; plan and build still go
-through theirs. `writing-plans` ends by asking how to execute: the answer is this repo's `build` role (inline
+through theirs. When brainstorming fills both roles, its playback is `intent.md` and its design doc is `spec.md`,
+both in the artifact folder (not `docs/superpowers/`). When the user delegates the calls ("just decide"), each
+artifact records that as its approval and the work goes on without stopping at the gates. `writing-plans` ends by asking how to execute: the answer is this repo's `build` role (inline
 unless sdlc.json names another), never a choice put to the user again.
 Override any of these in `sdlc.json` → `"providers": { "<role>": "<skill or 'inline'>" }`. If the named
 skill is not installed, do the role inline with the template and say so in one line.

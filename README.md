@@ -57,7 +57,7 @@ have new names, a line in `EDIT_TOOLS`/`SHELL_TOOLS`. Capture a real payload wit
 | `skills/sdlc` | The process: lanes S/M/L, artifacts (`intent.md`, `spec.md`, `plan.md`), the review loop, the definition of done, the role → provider table |
 | `skills/sdlc-init` | Onboards a repo: inventory the docs' rules, measure violations, enforce what a machine can, write rule cards, `sdlc.json`, `REVIEW.md` |
 | `skills/sdlc/references/reviewer.md` | The reviewer's instructions, one copy for every host: full and scoped modes; every finding needs a concrete failing case. `claude/agents/reviewer.md` is the same text as a Claude agent on the most capable model |
-| `hooks/sdlc.mjs` | `start` (points the agent at the skill in opted-in repos), `guard` (protected paths, banned commands, secrets in new content, read-only tests in fix mode, `approve` gates), `check` (per-file check after each edit), `bash` (after a shell command, subagent or MCP tool: the same check on the files it wrote, plus protected and test paths it changed, moved, deleted or committed (its own commits, not those a merge, pull or checkout brings in); a shell command cannot be inspected beforehand, so this reports after the fact and the agent restores the file), `verify` (on Stop). One script; `HOSTS` adapts its output to each agent |
+| `hooks/sdlc.mjs` | `start` (points the agent at the skill in opted-in repos), `guard` (protected paths, banned commands, secrets in new content, read-only tests in fix mode, `approve` gates, the first edit of a file mapped to a skill not yet loaded), `check` (per-file check after each edit), `bash` (after a shell command, subagent or MCP tool: the same check on the files it wrote, plus protected and test paths it changed, moved, deleted or committed (its own commits, not those a merge, pull or checkout brings in); a shell command cannot be inspected beforehand, so this reports after the fact and the agent restores the file), `verify` (on Stop). One script; `HOSTS` adapts its output to each agent |
 | `skills/sdlc/scripts/metrics.mjs` | The playbook's indicators from git: intent → spec → plan times, spec rework after the plan, agent-instruction and rule-card changes, debt added |
 | `skills/sdlc/templates/ci/`, `maintain/` | The playbook's CI jobs (PR review with claude-code-action, continuous agent evals, build triage) and the closing-the-loop `bands.yaml` |
 | `skills/sdlc/scripts/review-package.mjs` | One file per review: commits, stat, the rule cards that bind the changed files, and the diff (5 lines of context; lockfiles and other huge diffs listed, not inlined). `--since <snapshot>` packages only the fix for a scoped R2/R3 |
@@ -74,9 +74,15 @@ have new names, a line in `EDIT_TOOLS`/`SHELL_TOOLS`. Capture a real payload wit
   "tests": ["**/*.test.{ts,tsx}"],
   "riskyPaths": ["**/auth/**"],
   "providers": { "style": "ponytail:ponytail" },
-  "models": { "implementer": "sonnet", "planner": "sonnet" }
+  "models": { "implementer": "sonnet", "planner": "sonnet" },
+  "skills": [{ "glob": "apps/web/**/*.tsx", "skill": "vercel-react-best-practices" }]
 }
 ```
+
+`skills` routes code to the skills a repo installs for it: skills load from a one-line description among many, so
+agents often skip them. The guard refuses the first edit of a matching file until that skill is loaded (a Skill
+call, plain or `plugin:name`), once per skill and per subagent, so the next edit always passes. On hosts with no
+skill event (Codex) the refusal works as a reminder.
 
 `models` maps a subagent type to the model it runs on. On Claude Code the guard hook rewrites every `Agent` call
 that names that type, so the choice holds on every machine instead of depending on the agent passing `model`.

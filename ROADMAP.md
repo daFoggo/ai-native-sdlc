@@ -77,6 +77,16 @@ Must and Should findings were fixed in 0.4.0. Minor ones, kept here:
       provider that is not swappable per repo.
 - [ ] Unit tests still leave `sdlc-state-*`/`sdlc-none-*` temp folders.
 
+## Debt from skill routing (0.4.11, docs/work/2026-11-23-skill-routing)
+
+- [ ] Capture real Claude Code payloads (`hooks/fixtures/claude/`): a Skill call (`tool_input.skill`) and an edit
+      inside a subagent (`agent_id`). Docs list `agent_id`, but no fixture proves it; without it subagents share `main`.
+- [ ] A test that two sessions keep separate loaded state (R1 Minor 3).
+- [ ] A Skill call from a cwd outside any sdlc repo is not recorded, so the gate asks once more (R2 Minor).
+- [ ] Gemini and Antigravity skill activation does not satisfy the gate; capture their activation payloads.
+- [ ] Change 2: `business-map` skill and the review package's "flows touched" section.
+- [ ] Friction items 7–10 in `docs/work/2026-11-23-skill-routing/friction.md`.
+
 ## Rollout
 
 - [ ] Onboard wattprint-text2sql-mcp, then wattprint-backend once its developer agrees, with `sdlc-init`.

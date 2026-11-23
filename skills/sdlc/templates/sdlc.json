@@ -40,5 +40,11 @@
   "secrets": true,
   "artifacts": "docs/work",
   "debt": "docs/debt.md",
-  "providers": {}
+  "providers": {},
+  "skills": [
+    {
+      "glob": "<code path, e.g. src/**/*.tsx>",
+      "skill": "<an installed skill the model can invoke for that code>"
+    }
+  ]
 }

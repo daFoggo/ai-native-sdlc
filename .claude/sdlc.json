@@ -1,0 +1,8 @@
+{
+  "verify": "npm test",
+  "check": [{ "glob": "{hooks,skills}/**/*.mjs", "run": "node --check {file}" }],
+  "protect": [{ "glob": "hooks/fixtures/**", "reason": "payloads captured from real hosts: capture them again, never hand-edit" }],
+  "tests": ["**/*.test.mjs"],
+  "artifacts": "docs/work",
+  "debt": "ROADMAP.md"
+}

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { execFileSync, spawnSync } from "node:child_process"
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { basename, join } from "node:path"
 import { after, test } from "node:test"
@@ -514,4 +514,75 @@ test("protect: an unchanged rewrite and the sanctioned command are not reported;
   assert.doesNotMatch(run("node patch.mjs --check", () => writeFileSync(join(root, "vendor/x.ts"), "mine")), /protected/)
   assert.doesNotMatch(run("pnpm hairline", () => writeFileSync(join(root, "vendor/x.ts"), "upstream")), /protected/)
   assert.match(run("sed -i s/a/b/ vendor/x.ts", () => writeFileSync(join(root, "vendor/x.ts"), "edited")), /vendor\/x\.ts is protected/)
+})
+
+// ---- skill routing ----------------------------------------------------------------------------
+
+let skillSession = 0
+const routed = (extra = {}) => {
+  const root = repo({ skills: [{ glob: "app/**/*.tsx", skill: "vercel-react-best-practices" }, { glob: "app/db/**", skill: "bar" }], ...extra })
+  const session = `skills-${process.pid}-${Date.now()}-${skillSession++}`
+  const call = (tool, ti, agent) => guard({ tool_name: tool, tool_input: ti, cwd: root, session_id: session, ...(agent && { agent_id: agent }) })
+  return {
+    root,
+    edit: (rel, agent) => call("Edit", { file_path: join(root, rel), old_string: "a", new_string: "b" }, agent),
+    write: (rel) => call("Write", { file_path: join(root, rel), content: "x" }),
+    skill: (name, agent) => call("Skill", { skill: name }, agent),
+  }
+}
+
+test("skill routing: the first edit of a mapped file is refused once, naming the skill; the next passes", () => {
+  const r = routed()
+  const g = r.edit("app/page.tsx")
+  assert.equal(g?.decision, "deny")
+  assert.match(g.reason, /`vercel-react-best-practices`/)
+  assert.match(g.reason, /app\/page\.tsx/)
+  assert.equal(r.edit("app/page.tsx"), null)
+  assert.equal(r.edit("app/other.tsx"), null) // asked once per skill, not per file
+  assert.equal(r.edit("lib/a.ts"), null) // unmapped
+})
+
+test("skill routing: a Skill call, plain or plugin-qualified, satisfies it; a near name does not", () => {
+  const r = routed()
+  assert.equal(r.skill("xbar"), null)
+  assert.match(reason(r.edit("app/db/schema.sql")), /`bar`/)
+  const q = routed()
+  q.skill("vercel:vercel-react-best-practices")
+  assert.equal(q.edit("app/page.tsx"), null)
+})
+
+test("skill routing: a subagent is asked on its own", () => {
+  const r = routed()
+  r.skill("vercel-react-best-practices")
+  assert.equal(r.edit("app/page.tsx"), null)
+  assert.equal(r.edit("app/page.tsx", "a1")?.decision, "deny")
+  r.skill("vercel-react-best-practices", "a2")
+  assert.equal(r.edit("app/page.tsx", "a2"), null)
+})
+
+test("skill routing: only missing skills are named, protect wins, a new file is routed, no key changes nothing", () => {
+  const r = routed()
+  r.skill("bar")
+  const g = reason(r.edit("app/db/x.tsx")) // matches both globs; bar is loaded
+  assert.match(g, /vercel-react-best-practices/)
+  assert.doesNotMatch(g, /`bar`/)
+  const p = routed({ protect: [{ glob: "app/vendor/**", reason: "vendored" }] })
+  assert.match(reason(p.edit("app/vendor/a.tsx")), /protected: vendored/)
+  assert.equal(routed().write("app/new.tsx")?.decision, "deny")
+  const none = repo({})
+  assert.equal(guard({ tool_name: "Edit", tool_input: { file_path: join(none, "app/page.tsx") }, cwd: none, session_id: "skills-none" }), null)
+})
+
+test("R1-1: a plugin-qualified name in sdlc.json is satisfied by the same Skill call", () => {
+  const r = routed({ skills: [{ glob: "app/**", skill: "vercel:react-best-practices" }] })
+  r.skill("vercel:react-best-practices")
+  assert.equal(r.edit("app/page.tsx"), null)
+})
+
+test("R1-2: a repo without sdlc.json gets no seen file from Skill or MCP calls", () => {
+  const dir = mkdtempSync(join(tmpdir(), "sdlc-none-"))
+  const session = `skills-none-${process.pid}-${Date.now()}`
+  guard({ tool_name: "Skill", tool_input: { skill: "bar" }, cwd: dir, session_id: session })
+  guard({ tool_name: "mcp__x__y", tool_input: {}, cwd: dir, session_id: session })
+  assert.equal(existsSync(join(tmpdir(), `sdlc-seen-${session}.json`)), false)
 })

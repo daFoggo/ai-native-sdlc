@@ -128,6 +128,7 @@ export function normalize(input) {
     command: shell ? String(ti.command ?? ti.CommandLine ?? ti.commandLine ?? "") : "",
     files: EDIT_TOOLS.test(tool) ? editedFiles(ti, cwd) : [],
     session: input.session_id ?? input.sessionId ?? input.conversationId ?? "nosession",
+    agent: input.agent_id ?? "main", // Claude sets agent_id inside a subagent, whose context is its own
     toolUse: input.tool_use_id ?? input.toolUseId ?? input.toolCallId ?? "x",
   }
 }
@@ -189,6 +190,7 @@ function guardDispatch(e) {
 /** {decision: "deny" | "ask" | "allow", reason, updatedInput?} or null. */
 export function guard(input) {
   const e = normalize(input)
+  if (e.tool === "Skill" && rootsFor(e.cwd).length) seenOnce(e.session, `skill:${e.agent}:${bareSkill(e.ti.skill)}`)
   if (e.tool === "Skill" || e.tool === "Agent" || e.tool === "Task") return guardDispatch(e)
   if (e.shell) {
     // From a multi-repo parent folder the command may `cd` into any child repo: apply all of theirs.
@@ -221,14 +223,40 @@ export function guard(input) {
     const gate = (config.approve ?? []).find((a) => a.glob && matches(rel, a.glob))
     if (gate) return { decision: "ask", reason: `Needs approval (sdlc.json): ${gate.reason}` }
   }
+  return skillGate(e)
+}
+
+/** Last, so a real block above is never hidden behind it: the first edit of a file that sdlc.json maps to a skill
+ *  this agent has not loaded is refused once per skill, so the refusal is a nudge that can never wedge a session. */
+const bareSkill = (name) => String(name ?? "").split(":").pop() // `plugin:name` and `name` are one skill
+
+function skillGate(e) {
+  if (!e.files.length) return null
+  const seen = seenKeys(e.session)
+  for (const abs of e.files) {
+    const root = findRoot(dirname(abs))
+    if (!root) continue
+    const rel = posixRelative(root, abs)
+    const missing = [...new Set((loadConfig(root).skills ?? []).filter((s) => matches(rel, s.glob)).map((s) => bareSkill(s.skill)))].filter(
+      (n) => !seen.includes(`skill:${e.agent}:${n}`) && !seenOnce(e.session, `skill-asked:${e.agent}:${n}`),
+    )
+    if (missing.length)
+      return {
+        decision: "deny",
+        reason: `sdlc.json maps ${rel} to the ${missing.map((n) => `\`${n}\``).join(", ")} skill. Invoke it, then retry this edit. If it does not apply or is not installed, say why in one line and retry: the next edit passes.`,
+      }
+  }
   return null
 }
 
 // ---- check -----------------------------------------------------------------------------------
 
+const seenFile = (session) => join(tmpdir(), `sdlc-seen-${session}.json`)
+const seenKeys = (session) => (existsSync(seenFile(session)) ? JSON.parse(readFileSync(seenFile(session), "utf8")) : [])
+
 function seenOnce(session, key) {
-  const f = join(tmpdir(), `sdlc-seen-${session}.json`)
-  const seen = existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : []
+  const f = seenFile(session)
+  const seen = seenKeys(session)
   if (seen.includes(key)) return true
   writeFileSync(f, JSON.stringify([...seen, key]))
   return false

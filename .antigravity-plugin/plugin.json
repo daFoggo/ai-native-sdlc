@@ -1,7 +1,7 @@
 {
   "name": "sdlc",
   "displayName": "sdlc",
-  "version": "0.4.10",
+  "version": "0.4.11",
   "description": "AI-native SDLC: lanes from intent to merge, a review loop capped at three rounds, and hooks that enforce each project's own checks.",
   "logo": "assets/icon.png",
   "keywords": [
