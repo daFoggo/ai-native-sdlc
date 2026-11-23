@@ -18,10 +18,7 @@ test config, and recent git history. Do not ask what the repo already answers.
    already enforced (name the lint rule), checkable (a linter or script could catch it), or judgment.
 2. **Measure before enforcing.** For each checkable rule, count today's violations (grep or a trial lint run).
    Each one is either fixed to the rule or waived inline with the reason and the doc that allows it. Never ship
-   a rule that fails on day one, and never loosen a rule to make it pass. Fix only a handful; when a rule's
-   violations span more than about five files, waive those files in the lint config (a per-file override or a
-   baseline, with the reason), add the cleanup to the debt file, and ask before touching them. Onboarding never
-   rewrites existing code wholesale, deletes docstrings or edits tests to reach a green first run.
+   a rule that fails on day one, and never loosen a rule to make it pass.
 3. **Make the checkable rules real**, in the repo's own lint config so CI and humans get them too. Keep changes
    to existing code to the fixes from step 2, and restore anything a formatter reflowed that the change did not need.
 4. **Rule cards** for the judgment rules: `.claude/rules/<area>.md` (or `.agents/rules/`) with `paths:` globs
