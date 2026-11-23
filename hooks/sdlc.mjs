@@ -243,7 +243,7 @@ function skillGate(e) {
     if (missing.length)
       return {
         decision: "deny",
-        reason: `sdlc.json maps ${rel} to the ${missing.map((n) => `\`${n}\``).join(", ")} skill. Invoke it, then retry this edit. If it does not apply or is not installed, say why in one line and retry: the next edit passes.`,
+        reason: `sdlc.json maps ${rel} to skills not loaded yet: ${missing.map((n) => `\`${n}\``).join(", ")}. Invoke them, then retry this edit. If one does not apply or is not installed, say why in one line and retry: the next edit passes.`,
       }
   }
   return null
