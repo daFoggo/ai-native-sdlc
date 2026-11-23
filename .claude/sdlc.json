@@ -4,5 +4,6 @@
   "protect": [{ "glob": "hooks/fixtures/**", "reason": "payloads captured from real hosts: capture them again, never hand-edit" }],
   "tests": ["**/*.test.mjs"],
   "artifacts": "docs/work",
-  "debt": "ROADMAP.md"
+  "debt": "ROADMAP.md",
+  "map": "docs/business-map"
 }

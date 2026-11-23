@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Business map</title>
+<style>
+:root{--bg:#fff;--fg:#1c1c1c;--muted:#666;--line:#ddd;--obs:#1f6f43;--doc:#1d4f91;--inf:#8a5a00;--ver:#5b2b8c}
+@media (prefers-color-scheme:dark){:root{--bg:#141414;--fg:#e8e8e8;--muted:#9a9a9a;--line:#333;--obs:#6fcf97;--doc:#7aa7e8;--inf:#e0b05a;--ver:#c29ae8}}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,sans-serif}
+.wrap{display:grid;grid-template-columns:minmax(200px,260px) 1fr;gap:24px;max-width:1200px;margin:auto;padding:16px}
+@media (max-width:720px){.wrap{grid-template-columns:1fr}}
+nav ul,.legend{list-style:none;padding:0;margin:0}nav li{margin:4px 0}
+button{font:inherit;color:inherit;background:none;border:1px solid var(--line);border-radius:6px;padding:4px 8px;cursor:pointer;text-align:left}
+button[aria-current=true]{border-color:var(--fg)}small,.actor{color:var(--muted)}
+pre.mermaid{overflow-x:auto;background:transparent}code{font-size:13px}
+.k{font-size:12px;border:1px solid currentColor;border-radius:4px;padding:0 4px}
+.k-observed{color:var(--obs)}.k-documented{color:var(--doc)}.k-inferred{color:var(--inf)}.k-verified{color:var(--ver)}
+.steps li{margin:6px 0}.ev{margin:4px 0 8px}.gap{color:var(--inf)}
+</style></head><body><div class="wrap">
+<nav><h1>Business map</h1><p><small>commit 12f31ac34e2c18041f00f0e67224c80bee28d5bd</small></p><ul><li><button type="button" data-open="0">Agent edits a file in an opted-in repo</button> <small>flow · 2 gaps</small></li><li><button type="button" data-open="1">Review loop of one change</button> <small>state · 1 gaps</small></li></ul>
+<h3>Evidence</h3><ul class="legend"><li><span class="k k-observed">observed</span> read in code</li><li><span class="k k-documented">documented</span> a doc states it</li><li><span class="k k-inferred">inferred</span> the agent's guess</li><li><span class="k k-verified">verified</span> proven by running it</li></ul></nav>
+<main><section id="flow-0" data-flow="edit">
+<h2>Agent edits a file in an opted-in repo</h2><p class="actor">Actor: Coding agent</p>
+<pre class="mermaid">flowchart TD
+  s0[&quot;Session starts and is told the repo follows sdlc&quot;]
+  s1[&quot;Edit is checked before it happens&quot;]
+  s2[&quot;Refused: vendored file, secret or test in fix mode&quot;]
+  s3[&quot;Refused once: load the skill mapped to this code first&quot;]
+  s4[&quot;File is written and its fast check runs&quot;]
+  s5[&quot;Turn ends: the repo&#39;s verify command must pass&quot;]
+  s0 --&gt; s1
+  s1 --&gt; s2
+  s1 --&gt; s3
+  s1 --&gt; s4
+  s3 --&gt; s1
+  s4 --&gt; s5
+  click s0 call showStep(0, 0)
+  click s1 call showStep(0, 1)
+  click s2 call showStep(0, 2)
+  click s3 call showStep(0, 3)
+  click s4 call showStep(0, 4)
+  click s5 call showStep(0, 5)</pre>
+<h3>Steps</h3><ol class="steps"><li id="f0-s0"><button type="button" aria-expanded="false">Session starts and is told the repo follows sdlc</button><div class="ev" hidden><ul><li><span class="k k-observed">observed</span> <code>hooks/sdlc.mjs:506</code></li></ul></div></li><li id="f0-s1"><button type="button" aria-expanded="false">Edit is checked before it happens</button><div class="ev" hidden><ul><li><span class="k k-observed">observed</span> <code>hooks/sdlc.mjs:191</code></li><li><span class="k k-observed">observed</span> <code>hooks/sdlc.test.mjs:30</code> — protected path test</li></ul></div></li><li id="f0-s2"><button type="button" aria-expanded="false">Refused: vendored file, secret or test in fix mode</button><div class="ev" hidden><ul><li><span class="k k-observed">observed</span> <code>hooks/sdlc.mjs:210</code></li><li><span class="k k-observed">observed</span> <code>hooks/sdlc.mjs:217</code> — secret scan</li></ul></div></li><li id="f0-s3"><button type="button" aria-expanded="false">Refused once: load the skill mapped to this code first</button><div class="ev" hidden><ul><li><span class="k k-observed">observed</span> <code>hooks/sdlc.mjs:233</code></li><li><span class="k k-observed">observed</span> <code>hooks/sdlc.test.mjs:534</code></li><li class="gap">depends on another system: relies on Claude sending agent_id in subagents; no captured payload proves it</li></ul></div></li><li id="f0-s4"><button type="button" aria-expanded="false">File is written and its fast check runs</button><div class="ev" hidden><ul><li><span class="k k-observed">observed</span> <code>hooks/sdlc.mjs:291</code></li></ul></div></li><li id="f0-s5"><button type="button" aria-expanded="false">Turn ends: the repo&#39;s verify command must pass</button><div class="ev" hidden><ul><li><span class="k k-observed">observed</span> <code>hooks/sdlc.mjs:448</code></li><li><span class="k k-observed">observed</span> <code>hooks/sdlc.test.mjs:77</code></li><li class="gap">no test: a full npm test (~24 s) runs at every Stop; no measure of how often that delays the user</li></ul></div></li></ol>
+<h3>Gaps</h3><ul class="gaps"><li><b>Refused once: load the skill mapped to this code first</b> · depends on another system: relies on Claude sending agent_id in subagents; no captured payload proves it</li><li><b>Turn ends: the repo&#39;s verify command must pass</b> · no test: a full npm test (~24 s) runs at every Stop; no measure of how often that delays the user</li></ul>
+</section>
+<section id="flow-1" data-flow="review" hidden>
+<h2>Review loop of one change</h2><p class="actor">Actor: Tech lead (the user)</p>
+<pre class="mermaid">stateDiagram-v2
+  [*] --&gt; s0
+  state &quot;Full review (R1)&quot; as s0
+  state &quot;One fix pass, then scoped R2&quot; as s1
+  state &quot;Last fix pass, then scoped R3&quot; as s2
+  state &quot;Open findings handed to the lead&quot; as s3
+  state &quot;Clean: report and debt&quot; as s4
+  s0 --&gt; s1
+  s0 --&gt; s4
+  s1 --&gt; s2
+  s1 --&gt; s4
+  s2 --&gt; s3
+  s2 --&gt; s4</pre>
+<h3>Steps</h3><ol class="steps"><li id="f1-s0"><button type="button" aria-expanded="false">Full review (R1)</button><div class="ev" hidden><ul><li><span class="k k-documented">documented</span> <code>skills/sdlc/SKILL.md:82</code></li></ul></div></li><li id="f1-s1"><button type="button" aria-expanded="false">One fix pass, then scoped R2</button><div class="ev" hidden><ul><li><span class="k k-documented">documented</span> <code>skills/sdlc/SKILL.md:91</code></li></ul></div></li><li id="f1-s2"><button type="button" aria-expanded="false">Last fix pass, then scoped R3</button><div class="ev" hidden><ul><li><span class="k k-documented">documented</span> <code>skills/sdlc/SKILL.md:93</code></li></ul></div></li><li id="f1-s3"><button type="button" aria-expanded="false">Open findings handed to the lead</button><div class="ev" hidden><ul><li><span class="k k-documented">documented</span> <code>skills/sdlc/SKILL.md:94</code></li><li><span class="k k-verified">verified</span> <code>evals/i-review-stuck/case.yaml</code> proof <code>evals/RESULTS.md</code></li></ul></div></li><li id="f1-s4"><button type="button" aria-expanded="false">Clean: report and debt</button><div class="ev" hidden><ul><li><span class="k k-verified">verified</span> <code>evals/f-review-loop/case.yaml</code> proof <code>evals/RESULTS.md</code></li></ul></div></li></ol>
+<h3>Gaps</h3><ul class="gaps"><li>state change condition: nothing but the skill&#39;s prose stops a fourth round; no hook counts rounds</li></ul>
+</section></main>
+</div>
+<script type="module">
+// Clicks work before and without Mermaid: a blocked or hanging CDN leaves each chart as its source text.
+const toggle = (li, open) => { const b = li.querySelector("button"), ev = li.querySelector(".ev"); open ??= ev.hidden; ev.hidden = !open; b.setAttribute("aria-expanded", open) }
+window.showStep = (i, j) => {
+  const li = document.getElementById("f" + i + "-s" + j)
+  if (!li) return
+  toggle(li, true)
+  li.scrollIntoView({ block: "nearest" })
+}
+document.addEventListener("click", (ev) => {
+  const open = ev.target.closest("[data-open]")
+  if (open) return openFlow(open.dataset.open)
+  const step = ev.target.closest(".steps > li > button")
+  if (step) toggle(step.parentElement)
+})
+const ready = import("https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs")
+  .then(({ default: m }) => (m.initialize({ startOnLoad: false, securityLevel: "loose", theme: matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "default" }), m))
+  .catch(() => null)
+async function openFlow(i) {
+  document.querySelectorAll("main section").forEach((s) => (s.hidden = s.id !== "flow-" + i))
+  document.querySelectorAll("nav [data-open]").forEach((b) => b.setAttribute("aria-current", b.dataset.open === String(i)))
+  const pre = document.querySelector("#flow-" + i + " pre.mermaid")
+  const mermaid = await ready
+  if (mermaid && !pre.dataset.processed) await mermaid.run({ nodes: [pre] }).catch(() => {})
+}
+openFlow(0)
+</script></body></html>

@@ -41,7 +41,9 @@ breached metric: write `intent.md` with `Source:` naming it and the evidence, th
 1. `intent.md`: the problem in the originator's words, the outcome, who and what it touches, constraints, open
    questions. Role `intent`. The user approves it.
 2. `spec.md`: requirements and design, written against the repo's docs and rules, with **Areas of concern** where
-   policies conflict or the spec is unsure. Role `spec`. The user approves it.
+   policies conflict or the spec is unsure. Role `spec`. The user approves it. When sdlc.json names a `map`, read
+   the steps of `<map>/map.json` whose evidence is in the files the change will touch, and put the flows it may
+   change into Areas of concern.
 3. `plan.md`: files that change, order, interfaces, the test that proves each step, risks, and a **Standards**
    line per task naming the rule cards (`.claude/rules/` or `.agents/rules/`) that bind it. Role `plan`. Plans are where review loops are
    prevented: an ambiguous plan is the main cause of extra rounds. When building departs from the plan, update
@@ -128,7 +130,8 @@ Lane M does intent, spec, plan and build inline (in chat); their providers run i
 worth their cost. Review, style, debug and ui-new apply in every lane where they fit.
 
 When a role applies and its provider is installed, invoke that skill (Claude: the Skill tool; Codex: `$name`;
-Gemini and Antigravity: activate it) before doing the role,
+Gemini and Antigravity: activate it) before doing the role, unless it is already in context this session (invoking
+it again loads the same text twice),
 and save what it produces in the artifact's place (its design doc becomes `spec.md`, its plan `plan.md`). The
 sdlc rules above still bind it: the lanes, the test policy, the review cap. A provider that asks the user
 questions one by one (brainstorming) is the one exception when the user said up front they will not answer:

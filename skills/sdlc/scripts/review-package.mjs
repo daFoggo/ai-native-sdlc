@@ -44,6 +44,29 @@ export function matchingRules(root, files) {
   return out
 }
 
+/** From a business map (business-map skill): the steps whose evidence file is among the changed files, and the
+ *  evidence files that no longer exist. Paths compare with `/`, whatever the map was written on. */
+export function touchedFlows(map, files, exists) {
+  const changed = new Set(files)
+  const touched = []
+  const missing = new Set()
+  for (const f of map.flows ?? [])
+    for (const s of f.steps ?? [])
+      for (const e of s.evidence ?? []) {
+        const file = String(e.file ?? "").replaceAll("\\", "/")
+        const at = `${f.name ?? f.id} › ${s.label ?? s.id} — ${file}`
+        if (changed.has(file)) touched.push(`${at}${e.line ? `:${e.line}` : ""} (${e.kind})`)
+        if (file && !exists(file)) missing.add(at)
+      }
+  return { touched, missing: [...missing] }
+}
+
+/** The repo's sdlc.json (.agents/ wins, as in the hooks); {} without one. */
+function repoConfig(root) {
+  const f = [".agents", ".claude"].map((d) => join(root, d, "sdlc.json")).find(existsSync)
+  return f ? JSON.parse(readFileSync(f, "utf8")) : {}
+}
+
 /** A commit of the working tree as it is now (untracked files included), made in a scratch index: the real index,
  *  HEAD and files are untouched. It is unreachable, so git's gc drops it after the usual grace period. */
 function snapshot(git, root) {
@@ -89,7 +112,13 @@ function main() {
     .map(([, , f]) => f)
   const rules = matchingRules(root, files)
   const review = existsSync(join(root, "REVIEW.md")) ? "REVIEW.md (read it first)" : "none (no REVIEW.md)"
-  const diff = run("diff", CONTEXT, range, "--", ".", ...big.map((f) => `:(exclude,literal)${f}`))
+  const config = repoConfig(root)
+  // The change's own intent/spec/plan reach the reviewer by path; inlining them here pays for them twice.
+  const artifacts = `${String(config.artifacts ?? "docs/work").replace(/\/+$/, "")}/`
+  const docs = files.filter((f) => f.startsWith(artifacts) || (config.map && f === `${config.map.replace(/\/+$/, "")}/index.html`)) // rendered from map.json
+  const mapFile = config.map && join(root, config.map, "map.json")
+  const flows = mapFile && existsSync(mapFile) ? touchedFlows(JSON.parse(readFileSync(mapFile, "utf8")), files, (f) => existsSync(join(root, f))) : null
+  const diff = run("diff", CONTEXT, range, "--", ".", ...[...big, ...docs].map((f) => `:(exclude,literal)${f}`))
   const parts = [
     `# Review package ${since ? `fix since ${since.slice(0, 9)}` : head ? range : `${base.slice(0, 9)}..working tree`}`,
     `Repo: ${root}\nSnapshot: ${to} (for the next round: review-package.mjs ${base} --since ${to})\n` +
@@ -99,6 +128,9 @@ function main() {
       : `## Commits\n${run("log", "--oneline", `${base}..${head ?? "HEAD"}`) || "(none yet; the work is uncommitted)"}`,
     `## Stat\n${run("diff", "--stat", range)}`,
     big.length ? `## Not inlined (binary or over ${MAX_FILE_LINES} changed lines; read them if they matter)\n${big.join("\n")}` : "",
+    docs.length ? `## Listed, not inlined (artifacts reach you by path; the map's index.html is rendered from map.json)\n${docs.join("\n")}` : "",
+    flows?.touched.length ? `## Flows touched (check the change against each step)\n${flows.touched.map((l) => `- ${l}`).join("\n")}` : "",
+    flows?.missing.length ? `## Map evidence missing (the business map is stale here)\n${flows.missing.map((l) => `- ${l}`).join("\n")}` : "",
     ...rules.map((r) => `## Rule: ${r.name}\n${r.text}`),
     `## Diff\n${diff || "(no changes)"}`,
   ]

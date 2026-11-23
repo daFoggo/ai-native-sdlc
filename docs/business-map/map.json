@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "commit": "12f31ac34e2c18041f00f0e67224c80bee28d5bd",
+  "actors": [
+    { "id": "agent", "name": "Coding agent" },
+    { "id": "lead", "name": "Tech lead (the user)" }
+  ],
+  "flows": [
+    {
+      "id": "edit",
+      "name": "Agent edits a file in an opted-in repo",
+      "actor": "agent",
+      "kind": "flow",
+      "steps": [
+        { "id": "session", "label": "Session starts and is told the repo follows sdlc", "next": ["guard"],
+          "evidence": [{ "file": "hooks/sdlc.mjs", "line": 506, "kind": "observed" }] },
+        { "id": "guard", "label": "Edit is checked before it happens", "next": ["protected", "skill", "edited"],
+          "evidence": [{ "file": "hooks/sdlc.mjs", "line": 191, "kind": "observed" }, { "file": "hooks/sdlc.test.mjs", "line": 30, "kind": "observed", "note": "protected path test" }] },
+        { "id": "protected", "label": "Refused: vendored file, secret or test in fix mode", "next": [],
+          "evidence": [{ "file": "hooks/sdlc.mjs", "line": 210, "kind": "observed" }, { "file": "hooks/sdlc.mjs", "line": 217, "kind": "observed", "note": "secret scan" }] },
+        { "id": "skill", "label": "Refused once: load the skill mapped to this code first", "next": ["guard"],
+          "evidence": [{ "file": "hooks/sdlc.mjs", "line": 233, "kind": "observed" }, { "file": "hooks/sdlc.test.mjs", "line": 534, "kind": "observed" }] },
+        { "id": "edited", "label": "File is written and its fast check runs", "next": ["stop"],
+          "evidence": [{ "file": "hooks/sdlc.mjs", "line": 291, "kind": "observed" }] },
+        { "id": "stop", "label": "Turn ends: the repo's verify command must pass", "next": [],
+          "evidence": [{ "file": "hooks/sdlc.mjs", "line": 448, "kind": "observed" }, { "file": "hooks/sdlc.test.mjs", "line": 77, "kind": "observed" }] }
+      ],
+      "gaps": [
+        { "step": "skill", "type": "dependency", "text": "relies on Claude sending agent_id in subagents; no captured payload proves it" },
+        { "step": "stop", "type": "untested", "text": "a full npm test (~24 s) runs at every Stop; no measure of how often that delays the user" }
+      ]
+    },
+    {
+      "id": "review",
+      "name": "Review loop of one change",
+      "actor": "lead",
+      "kind": "state",
+      "steps": [
+        { "id": "r1", "label": "Full review (R1)", "next": ["fix1", "done"],
+          "evidence": [{ "file": "skills/sdlc/SKILL.md", "line": 82, "kind": "documented" }] },
+        { "id": "fix1", "label": "One fix pass, then scoped R2", "next": ["fix2", "done"],
+          "evidence": [{ "file": "skills/sdlc/SKILL.md", "line": 91, "kind": "documented" }] },
+        { "id": "fix2", "label": "Last fix pass, then scoped R3", "next": ["handover", "done"],
+          "evidence": [{ "file": "skills/sdlc/SKILL.md", "line": 93, "kind": "documented" }] },
+        { "id": "handover", "label": "Open findings handed to the lead", "next": [],
+          "evidence": [{ "file": "skills/sdlc/SKILL.md", "line": 94, "kind": "documented" }, { "file": "evals/i-review-stuck/case.yaml", "kind": "verified", "proof": "evals/RESULTS.md" }] },
+        { "id": "done", "label": "Clean: report and debt", "next": [],
+          "evidence": [{ "file": "evals/f-review-loop/case.yaml", "kind": "verified", "proof": "evals/RESULTS.md" }] }
+      ],
+      "gaps": [
+        { "type": "transition", "text": "nothing but the skill's prose stops a fourth round; no hook counts rounds" }
+      ]
+    }
+  ]
+}

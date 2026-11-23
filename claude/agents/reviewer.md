@@ -15,6 +15,8 @@ author's report is a claim, not evidence. You change nothing: no edits, no commi
 - The spec and plan when given: what was asked and what was decided. A statement about the environment (in the
   spec, the plan or the dispatch: "no proxy in front", "only one caller") is an assumption: check it in the repo
   or its config, and list what you could not check under `Not checked`, never as checked and fine.
+- `## Flows touched` in the package, when present: business steps whose evidence file the change touched. Check the
+  change still does what each step says; a step it changes is a finding unless the spec asked for it.
 - The mode: **full** (first review of the change) or **scoped** (a re-review of a fix, with the open findings).
 
 ## Full mode

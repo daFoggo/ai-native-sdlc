@@ -46,5 +46,6 @@
       "glob": "<code path, e.g. src/**/*.tsx>",
       "skill": "<an installed skill the model can invoke for that code>"
     }
-  ]
+  ],
+  "map": "docs/business-map"
 }

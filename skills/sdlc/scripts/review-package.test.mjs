@@ -6,7 +6,7 @@ import { join } from "node:path"
 import { test } from "node:test"
 import { fileURLToPath } from "node:url"
 
-import { matchingRules, rulePaths } from "./review-package.mjs"
+import { matchingRules, rulePaths, touchedFlows } from "./review-package.mjs"
 
 const SCRIPT = fileURLToPath(new URL("./review-package.mjs", import.meta.url))
 
@@ -104,4 +104,52 @@ test("--snapshot as base: work already dirty at the start stays out of the packa
   const p = readFileSync(execFileSync("node", [SCRIPT, base], { cwd: root, encoding: "utf8" }).trim(), "utf8")
   assert.match(p, /\+export const a = 2/)
   assert.doesNotMatch(p, /leftover/)
+})
+
+const bmap = {
+  flows: [
+    {
+      id: "pay",
+      name: "Checkout",
+      steps: [
+        { id: "a", label: "Pay", evidence: [{ file: "app\\pay.ts", line: 3, kind: "observed" }] },
+        { id: "b", label: "Receipt", evidence: [{ file: "app/gone.ts", kind: "inferred" }, { file: "docs/r.md", kind: "documented" }] },
+      ],
+    },
+  ],
+}
+
+test("touchedFlows lists steps whose evidence changed and evidence files that are gone", () => {
+  const r = touchedFlows(bmap, ["app/pay.ts"], (f) => f !== "app/gone.ts")
+  assert.deepEqual(r.touched, ["Checkout › Pay — app/pay.ts:3 (observed)"])
+  assert.deepEqual(r.missing, ["Checkout › Receipt — app/gone.ts"])
+  assert.deepEqual(touchedFlows(bmap, ["x.ts"], () => true), { touched: [], missing: [] })
+})
+
+test("the package gets flows touched from sdlc.json map, and lists artifacts instead of inlining them", () => {
+  const root = mkdtempSync(join(tmpdir(), "sdlc-pkg-"))
+  const git = (...a) => execFileSync("git", ["-c", "user.email=e@x", "-c", "user.name=e", ...a], { cwd: root, encoding: "utf8" })
+  const pkg = () => readFileSync(execFileSync("node", [SCRIPT, base], { cwd: root, encoding: "utf8" }).trim(), "utf8")
+  git("init", "-q")
+  mkdirSync(join(root, "app"))
+  writeFileSync(join(root, "app/pay.ts"), "export const a = 1\n")
+  git("add", "-A"); git("commit", "-qm", "init")
+  const base = git("rev-parse", "HEAD").trim()
+  writeFileSync(join(root, "app/pay.ts"), "export const a = 2\n")
+  mkdirSync(join(root, "docs/work/x"), { recursive: true })
+  writeFileSync(join(root, "docs/work/x/spec.md"), "SPEC BODY\n")
+  assert.doesNotMatch(pkg(), /Flows touched/) // no sdlc.json map
+  mkdirSync(join(root, ".claude"))
+  mkdirSync(join(root, "docs/map"))
+  writeFileSync(join(root, ".claude/sdlc.json"), JSON.stringify({ map: "docs/map" }))
+  assert.doesNotMatch(pkg(), /Flows touched/) // map folder without map.json
+  writeFileSync(join(root, "docs/map/map.json"), JSON.stringify(bmap))
+  writeFileSync(join(root, "docs/map/index.html"), "RENDERED PAGE\n")
+  const p = pkg()
+  assert.match(p, /^docs\/map\/index\.html$/m)
+  assert.doesNotMatch(p, /RENDERED PAGE/)
+  assert.match(p, /## Flows touched[^\n]*\n- Checkout › Pay — app\/pay\.ts:3 \(observed\)/)
+  assert.match(p, /## Map evidence missing[^\n]*\n- Checkout › Receipt — app\/gone\.ts/)
+  assert.match(p, /docs\/work\/x\/spec\.md/) // listed
+  assert.doesNotMatch(p, /SPEC BODY/) // not inlined
 })
