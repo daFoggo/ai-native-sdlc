@@ -1,4 +1,4 @@
-# Pilot: sdlc 0.5.3 trên wattprint (từ 2026-11-24)
+# Pilot: sdlc 0.5.4 trên wattprint (từ 2026-11-24)
 
 Mục tiêu: biết plugin có **dùng được, cho kết quả tốt, không lỗi, không phí token** trên việc thật. Không tắt
 hay đổi gì để so sánh: chạy đúng quy trình như mọi ngày. Số liệu máy đo được lấy sau từ transcript, nên phần bạn

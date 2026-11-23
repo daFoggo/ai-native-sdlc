@@ -10,7 +10,7 @@
 //                                                      the whole change
 
 import { execFileSync } from "node:child_process"
-import { copyFileSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { copyFileSync, existsSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join, matchesGlob, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -84,8 +84,13 @@ function snapshot(git, root) {
   try {
     // A copy of the real index keeps its stat cache, so only changed files are hashed again.
     const real = resolve(root, git({}, "rev-parse", "--git-path", "index").trim())
-    if (existsSync(real)) copyFileSync(real, index)
-    else git({ env }, "read-tree", "HEAD")
+    if (existsSync(real)) {
+      copyFileSync(real, index)
+      // Keep the real index's mtime: git trusts the stat cache of entries older than the index file, so a fresh
+      // mtime would hide a file edited in the same second it was staged (racy git) from the package.
+      const { atime, mtime } = statSync(real)
+      utimesSync(index, atime, mtime)
+    } else git({ env }, "read-tree", "HEAD")
     git({ env, stdio: ["ignore", "pipe", "ignore"] }, "add", "-A", "--", ".") // line-ending warnings are noise the agent pays for
     const tree = git({ env }, "write-tree").trim()
     return git({}, "commit-tree", tree, "-p", "HEAD", "-m", "sdlc review snapshot").trim()

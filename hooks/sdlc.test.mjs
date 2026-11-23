@@ -50,6 +50,28 @@ test("guard bans shell commands, also from a parent folder of several repos", ()
   assert.equal(guard({ tool_name: "Bash", tool_input: { command: "pnpm check" }, cwd: root }), null)
 })
 
+test("a banned command only mentioned in quotes or a heredoc passes; one a shell runs is still banned", () => {
+  const root = repo({ denyBash: [{ pattern: "pnpm\\s+add\\s+(?!-D)", reason: "use expo install" }] })
+  const run = (command) => guard({ tool_name: "Bash", tool_input: { command }, cwd: root })
+  for (const ok of [
+    "grep -rn 'pnpm add lodash' docs",
+    'git commit -m "docs: never pnpm add x"',
+    "python3 - <<'EOF'\nprint('pnpm add x')\nEOF\npnpm check",
+    "pnpm add -D jest",
+  ])
+    assert.equal(run(ok), null, ok)
+  for (const bad of [
+    "pnpm add lodash",
+    'cd app && pnpm add "lodash"',
+    "bash -c 'pnpm add lodash'",
+    'sh -lc "cd x && pnpm add y"',
+    "ssh box 'pnpm add y'",
+    'eval "pnpm add y"',
+    "bash <<'EOF'\npnpm add y\nEOF",
+  ])
+    assert.match(reason(run(bad)), /use expo install/, bad)
+})
+
 test("fix mode makes tests read-only until it is switched off", () => {
   const root = repo({ tests: ["**/*.test.ts"] })
   const fix = (arg) => execFileSync("node", [SCRIPT, "fix", arg], { cwd: root, encoding: "utf8" })

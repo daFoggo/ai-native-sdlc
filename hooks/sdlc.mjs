@@ -176,6 +176,16 @@ function guardDispatch(e) {
   return { decision: "allow", reason: `sdlc: ${type || "subagent"} runs on ${model} (sdlc.json)`, updatedInput: { ...e.ti, model } }
 }
 
+/** The command as the shell will run it: quoted text and heredoc bodies blanked, so a grep or commit message that only
+ *  mentions a banned command passes. Text a shell runs (`sh -c`, `bash -c`, `eval`, `ssh host`, `bash <<EOF`) is kept. */
+export function runnable(command) {
+  const RUNS = /(?:\b(?:ba|z|da)?sh\s+(?:-\w+\s+)*-\w*c\w*|\beval|\bssh(?:\s+-\S+)*\s+\S+)\s*$/
+  let out = command.replace(/<<-?\s*(['"]?)(\w+)\1([^\n]*)\n([\s\S]*?)\n\s*\2(?=\s|$)/g, (all, _q, tag, rest, body, at, s) =>
+    /\b(?:ba|z|da)?sh\s*$/.test(s.slice(0, at)) ? all : `<<${tag}${rest}\n${tag}`)
+  out = out.replace(/'[^']*'|"(?:\\.|[^"\\])*"/g, (q, at, s) => (RUNS.test(s.slice(0, at)) ? q : q[0] + q[0]))
+  return out
+}
+
 /** {decision: "deny" | "ask" | "allow", reason, updatedInput?} or null. */
 export function guard(input) {
   const e = normalize(input)
@@ -184,7 +194,8 @@ export function guard(input) {
   if (e.shell) {
     // From a multi-repo parent folder the command may `cd` into any child repo: apply all of theirs.
     const configs = shellRoots(e.cwd, e.command).map(loadConfig)
-    const hit = (list) => list.find((b) => new RegExp(b.pattern).test(e.command))
+    const run = runnable(e.command)
+    const hit = (list) => list.find((b) => new RegExp(b.pattern).test(run))
     const ban = hit(configs.flatMap((c) => c.denyBash ?? []))
     if (ban) return { decision: "deny", reason: `Blocked by sdlc.json: ${ban.reason}` }
     const gate = hit(configs.flatMap((c) => (c.approve ?? []).filter((a) => a.pattern)))

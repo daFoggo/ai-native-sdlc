@@ -8,5 +8,5 @@
   "scripts": {
     "test": "node --import ./test-tmp.mjs --test hooks/*.test.mjs skills/*/scripts/*.test.mjs"
   },
-  "version": "0.5.3"
+  "version": "0.5.4"
 }
