@@ -132,5 +132,6 @@ This repo follows its own process (`.claude/sdlc.json`): `npm test` is the verif
 The hooks a session runs come from the installed plugin cache, not this checkout, so a hook change is live only after
 reinstalling. Until then, run the checkout's hook by hand with a payload:
 `echo '{"tool_name":"Edit","tool_input":{"file_path":"<abs path>"},"cwd":"<repo>","session_id":"dev"}' | node hooks/sdlc.mjs guard`.
+Bump the patch version in every manifest with each pushed change to hooks or skills: `claude plugin update` compares versions, so a fix pushed under an installed version never arrives.
 
 MIT license.

@@ -88,6 +88,7 @@ Must and Should findings were fixed in 0.4.0. Minor ones, kept here:
 - [ ] review-package reads sdlc.json without `sdlc.local.json` (a near-copy of the hooks' `loadConfig`); a non-string `map` crashes it. Move `loadConfig` next to `matchingRules` and import it in the hooks.
 - [ ] The package reads the business map from the working tree, also for an older `<base> <head>` range.
 - [ ] Friction items still open in `docs/work/2026-11-23-skill-routing/friction.md` (see its Status): 7, 9, 12.
+- [ ] A killed `npm test` process skips `test-tmp.mjs`'s exit handler and leaves its temp folder (low).
 
 ## Rollout
 

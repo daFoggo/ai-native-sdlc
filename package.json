@@ -6,7 +6,7 @@
     "node": ">=22.5"
   },
   "scripts": {
-    "test": "node --test hooks/*.test.mjs skills/*/scripts/*.test.mjs"
+    "test": "node --import ./test-tmp.mjs --test hooks/*.test.mjs skills/*/scripts/*.test.mjs"
   },
-  "version": "0.5.0"
+  "version": "0.5.1"
 }

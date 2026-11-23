@@ -1,6 +1,6 @@
 {
   "name": "sdlc",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "AI-native SDLC: lanes from intent to merge, a review loop capped at three rounds, and hooks that enforce each project's own checks.",
   "author": {
     "name": "daFoggo",
