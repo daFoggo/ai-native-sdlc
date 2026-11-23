@@ -32,5 +32,6 @@ Kind: plugin (this repo), superpowers, ponytail, session (the agent's own habits
 - Measured, no change: 4. Startup injections are small (using-superpowers ~3.2 KB, ponytail ~3.5 KB, sdlc ~0.5 KB);
   the large startup cost is the listing of ~100 skills, which is also why skills get skipped. Per-repo
   `enabledPlugins` that turn off unrelated plugins (mobile skills in a web repo) cut both.
-- Open: 7 (writing-plans defaults), 9 (verify ~24 s per Stop), 12 (R1 cost), 19 (ponytail inside the reviewer:
-  needs the owner's settings).
+- Fixed in the owner's settings: 19 (`PONYTAIL_SUBAGENT_MATCHER=^(?!sdlc:reviewer$)`; pipe test 0 bytes for the reviewer, 3 KB for others,
+  ~0.5 s, no stall; a live reviewer no longer sees the injected skill, only the one global CLAUDE.md line).
+- Open: 7 (writing-plans defaults), 9 (verify ~24 s per Stop), 12 (R1 cost).
