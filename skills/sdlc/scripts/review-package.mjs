@@ -20,7 +20,7 @@ const MAX_FILE_LINES = 800 // a lockfile or generated file this big is listed, n
 
 /** The `paths:` globs of a rule file's frontmatter: a YAML block list, a flow list `[a, b]`, or `a, b`. */
 export function rulePaths(text) {
-  const fm = text.match(/^---\n([\s\S]*?)\n---/)?.[1] ?? ""
+  const fm = text.replace(/\r\n/g, "\n").match(/^---\n([\s\S]*?)\n---/)?.[1] ?? ""
   const m = fm.match(/^paths:[ \t]*(.*)\n?((?:[ \t]*-.*\n?)*)/m)
   if (!m) return []
   const strip = (s) => s.trim().replace(/^["']|["']$/g, "")
@@ -61,10 +61,19 @@ export function touchedFlows(map, files, exists) {
   return { touched, missing: [...missing] }
 }
 
-/** The repo's sdlc.json (.agents/ wins, as in the hooks); {} without one. */
-function repoConfig(root) {
-  const f = [".agents", ".claude"].map((d) => join(root, d, "sdlc.json")).find(existsSync)
-  return f ? JSON.parse(readFileSync(f, "utf8")) : {}
+/** The folder that holds the repo's sdlc.json (`.agents/` wins). */
+export const configDir = (dir) => [".agents", ".claude"].map((c) => join(dir, c)).find((c) => existsSync(join(c, "sdlc.json")))
+
+/** sdlc.json with sdlc.local.json beside it; {} for a repo that has none. Shared with the hooks. */
+export function loadConfig(root) {
+  const dir = configDir(root)
+  if (!dir) return {}
+  const read = (f) => (existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : {})
+  const shared = read(join(dir, "sdlc.json"))
+  const local = read(join(dir, "sdlc.local.json"))
+  // Lists add up (a machine adds a ban or a PATH entry without copying the team's); other values are overridden.
+  for (const [k, v] of Object.entries(local)) shared[k] = Array.isArray(v) && Array.isArray(shared[k]) ? [...shared[k], ...v] : v
+  return shared
 }
 
 /** A commit of the working tree as it is now (untracked files included), made in a scratch index: the real index,
@@ -112,11 +121,12 @@ function main() {
     .map(([, , f]) => f)
   const rules = matchingRules(root, files)
   const review = existsSync(join(root, "REVIEW.md")) ? "REVIEW.md (read it first)" : "none (no REVIEW.md)"
-  const config = repoConfig(root)
+  const config = loadConfig(root)
+  const map = typeof config.map === "string" ? config.map.replace(/\/+$/, "") : null
   // The change's own intent/spec/plan reach the reviewer by path; inlining them here pays for them twice.
   const artifacts = `${String(config.artifacts ?? "docs/work").replace(/\/+$/, "")}/`
-  const docs = files.filter((f) => f.startsWith(artifacts) || (config.map && f === `${config.map.replace(/\/+$/, "")}/index.html`)) // rendered from map.json
-  const mapFile = config.map && join(root, config.map, "map.json")
+  const docs = files.filter((f) => f.startsWith(artifacts) || (map && f === `${map}/index.html`)) // rendered from map.json
+  const mapFile = map && join(root, map, "map.json")
   const flows = mapFile && existsSync(mapFile) ? touchedFlows(JSON.parse(readFileSync(mapFile, "utf8")), files, (f) => existsSync(join(root, f))) : null
   const diff = run("diff", CONTEXT, range, "--", ".", ...[...big, ...docs].map((f) => `:(exclude,literal)${f}`))
   const parts = [

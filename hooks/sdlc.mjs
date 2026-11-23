@@ -20,16 +20,13 @@ import { homedir, tmpdir } from "node:os"
 import { dirname, join, matchesGlob, relative, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { matchingRules } from "../skills/sdlc/scripts/review-package.mjs"
+import { configDir, loadConfig, matchingRules } from "../skills/sdlc/scripts/review-package.mjs"
 
 // Paths in messages, globs and git commands use "/" on every OS (Windows' relative() gives "\").
 const posixRelative = (from, to) => relative(from, to).replaceAll("\\", "/")
 
 const VERIFY_BUDGET = 540 // seconds for all repos together: the Stop hook is killed at 600 (hooks/claude-codex.json)
 const MAX_BLOCKS = 3 // Stop blocks per session and repo before verify only warns: the review-loop cap.
-const CONFIG_DIRS = [".agents", ".claude"]
-
-const configDir = (dir) => CONFIG_DIRS.map((c) => join(dir, c)).find((c) => existsSync(join(c, "sdlc.json")))
 
 export function findRoot(start) {
   for (let dir = resolve(start); ; dir = dirname(dir)) {
@@ -38,15 +35,7 @@ export function findRoot(start) {
   }
 }
 
-export function loadConfig(root) {
-  const dir = configDir(root)
-  const read = (f) => (existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : {})
-  const shared = read(join(dir, "sdlc.json"))
-  const local = read(join(dir, "sdlc.local.json"))
-  // Lists add up (a machine adds a ban or a PATH entry without copying the team's); other values are overridden.
-  for (const [k, v] of Object.entries(local)) shared[k] = Array.isArray(v) && Array.isArray(shared[k]) ? [...shared[k], ...v] : v
-  return shared
-}
+export { loadConfig }
 
 const matches = (rel, globs) => [globs].flat().some((g) => matchesGlob(rel, g))
 

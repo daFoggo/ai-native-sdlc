@@ -6,7 +6,7 @@ import { join } from "node:path"
 import { test } from "node:test"
 import { fileURLToPath } from "node:url"
 
-import { matchingRules, rulePaths, touchedFlows } from "./review-package.mjs"
+import { loadConfig, matchingRules, rulePaths, touchedFlows } from "./review-package.mjs"
 
 const SCRIPT = fileURLToPath(new URL("./review-package.mjs", import.meta.url))
 
@@ -152,4 +152,31 @@ test("the package gets flows touched from sdlc.json map, and lists artifacts ins
   assert.match(p, /## Map evidence missing[^\n]*\n- Checkout › Receipt — app\/gone\.ts/)
   assert.match(p, /docs\/work\/x\/spec\.md/) // listed
   assert.doesNotMatch(p, /SPEC BODY/) // not inlined
+})
+
+test("rulePaths reads a card saved with CRLF line endings", () => {
+  assert.deepEqual(rulePaths("---\r\npaths:\r\n  - apps/**\r\n  - lib/*.ts\r\n---\r\nbody"), ["apps/**", "lib/*.ts"])
+  assert.deepEqual(rulePaths("---\r\npaths: src/**\r\n---\r\n"), ["src/**"])
+})
+
+test("loadConfig adds sdlc.local.json lists to the team's; a repo without sdlc.json gives {}", () => {
+  const root = mkdtempSync(join(tmpdir(), "sdlc-cfg-"))
+  assert.deepEqual(loadConfig(root), {})
+  mkdirSync(join(root, ".claude"))
+  writeFileSync(join(root, ".claude/sdlc.json"), JSON.stringify({ tests: ["a"], map: "m" }))
+  writeFileSync(join(root, ".claude/sdlc.local.json"), JSON.stringify({ tests: ["b"], map: "n" }))
+  assert.deepEqual(loadConfig(root), { tests: ["a", "b"], map: "n" })
+})
+
+test("a non-string map in sdlc.json does not crash the package", () => {
+  const root = mkdtempSync(join(tmpdir(), "sdlc-pkg-"))
+  const git = (...a) => execFileSync("git", ["-c", "user.email=e@x", "-c", "user.name=e", ...a], { cwd: root, encoding: "utf8" })
+  git("init", "-q")
+  writeFileSync(join(root, "a.ts"), "1\n")
+  git("add", "-A"); git("commit", "-qm", "init")
+  const base = git("rev-parse", "HEAD").trim()
+  writeFileSync(join(root, "a.ts"), "2\n")
+  mkdirSync(join(root, ".claude"))
+  writeFileSync(join(root, ".claude/sdlc.json"), JSON.stringify({ map: { dir: "x" } }))
+  assert.match(readFileSync(execFileSync("node", [SCRIPT, base], { cwd: root, encoding: "utf8" }).trim(), "utf8"), /## Stat/)
 })

@@ -588,3 +588,11 @@ test("R1-2: a repo without sdlc.json gets no seen file from Skill or MCP calls",
   guard({ tool_name: "mcp__x__y", tool_input: {}, cwd: dir, session_id: session })
   assert.equal(existsSync(join(tmpdir(), `sdlc-seen-${session}.json`)), false)
 })
+
+test("skill routing: a skill loaded in one session does not open the gate in another", () => {
+  const r = routed()
+  r.skill("vercel-react-best-practices")
+  assert.equal(r.edit("app/page.tsx"), null) // loaded here: passes
+  const other = guard({ tool_name: "Edit", tool_input: { file_path: join(r.root, "app/page.tsx"), old_string: "a", new_string: "b" }, cwd: r.root, session_id: `skills-other-${process.pid}-${Date.now()}` })
+  assert.match(JSON.stringify(other), /vercel-react-best-practices/)
+})

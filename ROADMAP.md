@@ -67,25 +67,26 @@ Open work after the first pilot (2026-11-20, wattprint-web). Most important firs
 ## Debt from the independent review (R1, 0.3.2 → 0.4.0)
 
 Must and Should findings were fixed in 0.4.0. Minor ones, kept here:
-- [ ] Claude's after-edit `check` matcher leaves out `NotebookEdit` (guarded, not checked).
-- [ ] A rule card with CRLF line endings loses its `paths:` and binds every file (`rulePaths` splits on `\n`).
+- [x] Claude's after-edit `check` matcher leaves out `NotebookEdit` (guarded, not checked).
+- [x] A rule card with CRLF line endings loses its `paths:` and binds every file (`rulePaths` splits on `\n`).
 - [ ] The Stop `blocks` counter resets only on a green run, so after three early failures later tasks only warn.
 - [ ] Gemini hooks hardcode `~/.gemini/extensions/sdlc/` and have no captured payloads.
 - [ ] The role table names hallmark for `ui-new` "never on an existing design system", yet the pilot repo has one:
       say instead that the repo's design docs win and hallmark only fills what they leave open.
 - [ ] ponytail switches itself on through its own hook whatever `providers.style` says: document it as the one
       provider that is not swappable per repo.
-- [ ] Unit tests still leave `sdlc-state-*`/`sdlc-none-*` temp folders.
+- [x] Unit tests still leave `sdlc-state-*`/`sdlc-none-*` temp folders.
 
 ## Debt from skill routing (0.4.11, docs/work/2026-11-23-skill-routing)
 
-- [ ] Capture real Claude Code payloads (`hooks/fixtures/claude/`): a Skill call (`tool_input.skill`) and an edit
-      inside a subagent (`agent_id`). Docs list `agent_id`, but no fixture proves it; without it subagents share `main`.
-- [ ] A test that two sessions keep separate loaded state (R1 Minor 3).
+- [x] Capture real Claude Code payloads (`hooks/fixtures/claude/`): a Skill call (`tool_input.skill`) and an edit
+      inside a subagent (`agent_id`). Docs list `agent_id`, but no fixture proves it; without it subagents share `main`. Verified live in a Claude Code session (main and a subagent get separate keys); no fixture file captured.
+- [ ] Save a real Skill call and a subagent edit as fixture files in `hooks/fixtures/claude/` (behavior verified live, files not captured).
+- [x] A test that two sessions keep separate loaded state (R1 Minor 3).
 - [ ] A Skill call from a cwd outside any sdlc repo is not recorded, so the gate asks once more (R2 Minor).
 - [ ] Gemini and Antigravity skill activation does not satisfy the gate; capture their activation payloads.
 - [x] Change 2: `business-map` skill and the review package's "flows touched" section (0.5.0).
-- [ ] review-package reads sdlc.json without `sdlc.local.json` (a near-copy of the hooks' `loadConfig`); a non-string `map` crashes it. Move `loadConfig` next to `matchingRules` and import it in the hooks.
+- [x] review-package reads sdlc.json without `sdlc.local.json` (a near-copy of the hooks' `loadConfig`); a non-string `map` crashes it. Move `loadConfig` next to `matchingRules` and import it in the hooks.
 - [ ] The package reads the business map from the working tree, also for an older `<base> <head>` range.
 - [ ] Friction items still open in `docs/work/2026-11-23-skill-routing/friction.md` (see its Status): 7, 9, 12.
 - [ ] A killed `npm test` process skips `test-tmp.mjs`'s exit handler and leaves its temp folder (low).
