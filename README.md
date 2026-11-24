@@ -101,7 +101,8 @@ Without a map, only one floor applies: `sdlc:reviewer` never runs on `haiku`. Th
 ["~/.local/node/bin"]`, an extra ban), other values replace them. `pathPrepend` reaches only the hooks' own
 commands, not the agent's shell. A `protect` entry's optional `via` is a pattern for the shell command allowed to
 write there (the vendored set's update script); a command that rewrites a protected file unchanged is not reported.
-`approve` asks a person even when the session runs with permission prompts bypassed: it is the human gate.
+`approve` asks a person through the host's permission prompt; in a session that runs with prompts bypassed
+(`bypassPermissions`) it stays silent, since that user chose not to be asked. `deny`, `protect` and secrets still block.
 In a folder that holds several repos, the Stop hook verifies each child repo with its own `sdlc.json` that the
 session changed. Secret
 scanning (keys and tokens written into tracked files) is on unless `"secrets": false`.

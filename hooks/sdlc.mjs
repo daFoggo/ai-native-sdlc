@@ -636,7 +636,10 @@ function main() {
     const msg = start(input)
     if (msg) emit(host.start(msg))
   } else if (mode === "guard") {
-    const g = guard(input)
+    let g = guard(input)
+    // A hook's "ask" prompts even in bypassPermissions, the mode in which the user said not to be asked: an approve
+    // gate then yields to the session's own permission mode. Denies (secrets, denyBash, protect) still block.
+    if (g?.decision === "ask" && input.permission_mode === "bypassPermissions") g = null
     if (g) emit(host.guard(g))
     else if (host.pass) emit(host.pass)
     // Any tool that runs and is not a file edit may still write files (a subagent whose model was set included).

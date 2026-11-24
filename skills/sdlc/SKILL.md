@@ -61,7 +61,8 @@ breached metric: write `intent.md` with `Source:` naming it and the evidence, th
   folder); tests are read-only until `fix off`. Fix the code, not the test.
 - The hooks run the project's check after every edit and its verify command when you stop; a failing check comes
   back to you. They also refuse an edit that writes a secret into a tracked file, and pause for the user on the
-  paths and commands sdlc.json lists under `approve`; the reason says who approves. Never weaken a check, a lint rule or a test to get green; a real exception gets an inline waiver
+  paths and commands sdlc.json lists under `approve` (not in a session that bypasses permission prompts); the reason
+  says who approves. Never weaken a check, a lint rule or a test to get green; a real exception gets an inline waiver
   that cites the doc that allows it.
 - A deliberate shortcut gets a `shortcut: <limit>, <when to upgrade>` comment.
 

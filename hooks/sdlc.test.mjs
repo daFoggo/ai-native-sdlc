@@ -227,6 +227,23 @@ test("approve gates ask instead of deny; Codex, which cannot ask from a hook, de
   assert.match(out.permissionDecisionReason, /Ask the user/)
 })
 
+test("in bypassPermissions an approve gate yields to the session's mode; a deny still blocks", () => {
+  const root = repo({
+    approve: [{ pattern: "deploy.*prod", reason: "release manager signs off" }],
+    denyBash: [{ pattern: "rm -rf /", reason: "never" }],
+  })
+  const run = (command, permission_mode) =>
+    spawnSync("node", [SCRIPT, "guard"], {
+      input: JSON.stringify({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command }, cwd: root, session_id: `b${process.pid}`, permission_mode }),
+      encoding: "utf8",
+      cwd: tmpdir(),
+    }).stdout.trim()
+  // The user chose to skip prompts: a hook "ask" would prompt anyway, so the gate stays silent.
+  assert.equal(run("make deploy env=prod", "bypassPermissions"), "")
+  assert.equal(JSON.parse(run("make deploy env=prod", "default")).hookSpecificOutput.permissionDecision, "ask")
+  assert.equal(JSON.parse(run("rm -rf /", "bypassPermissions")).hookSpecificOutput.permissionDecision, "deny")
+})
+
 test("hosts without path-scoped rules get each matching rule card once per session", () => {
   const root = repo({})
   mkdirSync(join(root, ".claude", "rules"), { recursive: true })
