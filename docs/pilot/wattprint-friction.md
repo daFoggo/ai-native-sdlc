@@ -17,3 +17,7 @@ Hand-written task rows live in the user's sheet; this file holds what the agent 
 - **P9 (2026-11-24, 0.5.8)** "Minor goes to the debt list" let the agent park every R1 Minor and audit leftover in
   docs/debt.md and report done. The owner's rule is that debt is paid, not parked: Minors are now fixed in one pass
   after the loop (no extra round), and the debt file holds only user-deferred items and `shortcut:` limits.
+
+- **P10 (2026-11-24, 0.5.9)** The reviewer agent defaulted to `opus`, so every call without a `model` ran on the
+  most expensive tier: 58 of 78 opus reviews in the wattprint pilot, and the plugin was 11 % of the owner's usage.
+  The default is now `sonnet`; the skill tells lane L R1 to pass `opus` (still the only round that needs it).

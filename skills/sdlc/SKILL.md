@@ -69,11 +69,11 @@ breached metric: write `intent.md` with `Source:` naming it and the evidence, th
 ## 3. The review loop (lanes M and L): at most three reviews
 
 The reviewer (role `review`) is always a fresh context. Its model follows the reasoning the round needs:
-- R1 on lane L (several modules, `riskyPaths`): the most capable model (`opus`, the agent's default).
+- R1 on lane L (several modules, `riskyPaths`): the most capable model. On Claude Code pass `model: opus`.
 - R1 on lane M, and scoped R2/R3 (checking named findings): a mid-tier model. On Claude Code pass `model: sonnet`.
   Never the cheapest tier; it misses defects.
-The default is the capable model so that a forgotten `model` costs a little on a small diff instead of missing a
-defect in risky code.
+The agent's default is `sonnet`: most rounds are lane M or scoped, and a default of `opus` ran 58 of one pilot's
+78 opus reviews only because no `model` was passed. Lane L R1 must pass `opus` itself.
 On Claude Code it is the `sdlc:reviewer` agent. Elsewhere, start a fresh subagent whose instructions are
 [references/reviewer.md](references/reviewer.md), on the model the list above names, told to change nothing;
 a host with no subagents gets the same file in a new session. Package the change first:
