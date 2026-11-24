@@ -41,7 +41,8 @@ fix diff goes under "Outside scope" and never reopens the loop. This is what mak
 
 - **Must fix**: a bug, a security or data-loss risk, a broken bound rule, or breaks at the stated load.
 - **Should fix**: risky logic without a test, real slowness, a near-copy that must change together.
-- **Minor**: everything else worth a line. Minor never blocks and never enters the fix loop.
+- **Minor**: everything else worth a line. Minor never blocks a round; the author fixes it in one pass after the
+  loop.
 
 ## Output
 

@@ -87,7 +87,9 @@ not, new files included) and the rule cards that bind it.
    requirements as `spec.md` in the lane M folder (the one that holds `review.md`) and pass that path.
 2. Sort the findings yourself: **Must fix** and **Should fix** enter ONE fix pass, all together; each fix gets a
    test that failed first. A fix covers every place the finding's pattern occurs, not only the lines the reviewer
-   cited, and its test covers the pattern: fixing the examples leaves the sibling for the next round. **Minor** goes to the debt list, never into the loop. A finding you reject is a
+   cited, and its test covers the pattern: fixing the examples leaves the sibling for the next round. **Minor** stays out of the rounds (it never earns an R2 of its own) but is fixed, not parked: one pass after the
+   loop's last round, a test first where it carries logic, each fix listed in `review.md`. Only what the user
+   explicitly defers goes to the debt list. A finding you reject is a
    ruling: `Ruling: <finding> — <why> — <cost if wrong>`. Save the report, your rulings and each repo's
    `<base>` and `Snapshot:` to `review.md` in the change's artifact folder (lane M: `<artifacts>/<date>-<slug>/`
    too, created for it), and update it after each round: a compaction keeps files, not the findings in chat.
@@ -108,8 +110,11 @@ still holds it, and the new R1 reviews the closed change again. A fix for a find
 
 - The verify command passed on the final tree (the Stop hook runs it; read its result, do not assume).
 - UI changes were opened in the running app; say what you exercised.
-- Report: what changed, the review rounds used, every `Ruling:`, and the debt you added (`shortcut:` comments and
-  deferred Minors, appended to the file named by `debt` in sdlc.json, `docs/debt.md` when it names none).
+- Every Minor is fixed (the pass after the loop) unless the user deferred it. Debt is only what the user deferred and
+  deliberate `shortcut:` limits with their trigger; an item there is paid in a later change, never left by default.
+- Report: what changed, the review rounds used, every `Ruling:`, the Minors fixed, and the debt you added
+  (`shortcut:` comments and user-deferred items, appended to the file named by `debt` in sdlc.json, `docs/debt.md`
+  when it names none).
 - Work that carries record IDs (tickets, a bug list) ends with one line per ID: its status (fixed, deferred, not
   reproduced), the commit or PR (or `uncommitted`), and how it was fixed. An ID with no line is not done. Hand the
   lines to the user; update the tracker yourself only when the user asks.
