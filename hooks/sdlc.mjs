@@ -229,6 +229,25 @@ export function guard(input) {
 /** Last, so a real block above is never hidden behind it: the first edit of a file that sdlc.json maps to a skill
  *  this agent has not loaded is refused once per skill, so the refusal is a nudge that can never wedge a session. */
 const bareSkill = (name) => String(name ?? "").split(":").pop() // `plugin:name` and `name` are one skill
+// The one reader of `skills`: a malformed entry is dropped (start reports the shape), never thrown in a hook.
+const skillMap = (c) => (Array.isArray(c.skills) ? c.skills.filter((s) => typeof s?.glob === "string" && typeof s?.skill === "string") : [])
+
+/** Skills a Claude Code settings layer turns off (`skillOverrides: { name: "off" }`), later layers winning: a
+ *  mapping to one can never be satisfied, so the guard skips it and `start` reports it.
+ *  shortcut: reads the repo's and the user's settings only, not a parent folder's; add it if a multi-repo folder sets them. */
+export function skillsOff(root, home = homedir()) {
+  const off = new Set()
+  for (const f of [join(home, ".claude", "settings.json"), join(root, ".claude", "settings.json"), join(root, ".claude", "settings.local.json")]) {
+    let o
+    try {
+      o = JSON.parse(readFileSync(f, "utf8")).skillOverrides
+    } catch {
+      continue // missing or broken: the host reports its own settings
+    }
+    for (const [k, v] of Object.entries(o ?? {})) v === "off" ? off.add(bareSkill(k)) : off.delete(bareSkill(k))
+  }
+  return off
+}
 
 function skillGate(e) {
   if (!e.files.length) return null
@@ -237,8 +256,10 @@ function skillGate(e) {
     const root = findRoot(dirname(abs))
     if (!root) continue
     const rel = posixRelative(root, abs)
-    const missing = [...new Set((loadConfig(root).skills ?? []).filter((s) => matches(rel, s.glob)).map((s) => bareSkill(s.skill)))].filter(
-      (n) => !seen.includes(`skill:${e.agent}:${n}`) && !seenOnce(e.session, `skill-asked:${e.agent}:${n}`),
+    const mapped = [...new Set(skillMap(loadConfig(root)).filter((s) => matches(rel, s.glob)).map((s) => bareSkill(s.skill)))]
+    const off = mapped.length ? skillsOff(root) : new Set()
+    const missing = mapped.filter(
+      (n) => !off.has(n) && !seen.includes(`skill:${e.agent}:${n}`) && !seenOnce(e.session, `skill-asked:${e.agent}:${n}`),
     )
     if (missing.length)
       return {
@@ -506,6 +527,32 @@ export function verify(input, stateFile = stateFileFor(normalize(input).session)
 
 // ---- start -----------------------------------------------------------------------------------
 
+// Every key some part of the plugin reads (hooks, review package, the skills' text). `$`, `_` and `/` keys are comments.
+const CONFIG_KEYS = new Set(["verify", "verifyTimeout", "verifyIgnore", "check", "protect", "denyBash", "approve", "tests", "riskyPaths",
+  "providers", "models", "skills", "map", "artifacts", "debt", "pathPrepend", "secrets"])
+
+/** Config that loads but can never do what it says: checked once per session at start, so a dead path or a typo
+ *  shows up before the agent trips on it. Silent (no tokens) when the config is healthy. */
+export function configProblems(root, c, home = homedir()) {
+  const out = []
+  const unknown = Object.keys(c).filter((k) => !CONFIG_KEYS.has(k) && !/^[$_/]/.test(k))
+  if (unknown.length) out.push(`unknown key ${unknown.join(", ")} (ignored by the plugin)`)
+  for (const k of ["artifacts", "debt"]) {
+    if (typeof c[k] !== "string") continue
+    // Inside the repo a missing folder is made on first use; outside it (a sibling repo) it is a dead path (P5).
+    const dir = dirname(resolve(root, c[k]))
+    if (posixRelative(root, dir).startsWith("..") && !existsSync(dir)) out.push(`${k}: folder ${posixRelative(root, dir)} does not exist`)
+  }
+  if (typeof c.map === "string" && !existsSync(join(root, c.map, "map.json")))
+    out.push(`map: ${posixRelative(root, join(root, c.map, "map.json"))} does not exist (reviews list no flows)`)
+  if (c.skills !== undefined && skillMap(c).length !== (Array.isArray(c.skills) ? c.skills.length : -1))
+    out.push("skills: must be a list of { glob, skill } strings; the malformed entries are ignored")
+  const off = skillsOff(root, home)
+  for (const n of new Set(skillMap(c).map((s) => bareSkill(s.skill))))
+    if (off.has(n)) out.push(`skills: ${n} is mapped but turned off in settings (skillOverrides); the guard skips it`)
+  return out
+}
+
 export function start(input, stateFile = stateFileFor(normalize(input).session)) {
   const base = projectDir(input)
   const roots = rootsFor(base)
@@ -515,17 +562,22 @@ export function start(input, stateFile = stateFileFor(normalize(input).session))
   for (const r of roots) state[r] = { ...(state[r] ?? { blocks: 0, base: headOf(r) }), tracked: true }
   writeFileSync(stateFile, JSON.stringify(state))
   // The paths are said up front: agents fall back to the skill's defaults when the repo set its own.
+  const problems = []
   const where = roots.map((r) => {
-    let c
+    const name = posixRelative(base, r) || "."
+    let c, p
     try {
       c = loadConfig(r)
+      p = configProblems(r, c)
     } catch {
-      return `${posixRelative(base, r) || "."} (sdlc.json unreadable: fix it)` // one bad repo must not drop the pointer for all
+      return `${name} (sdlc.json unreadable: fix it)` // one bad repo must not drop the pointer for all
     }
-    return `${posixRelative(base, r) || "."} (artifacts in ${c.artifacts ?? "docs/work"}/<date>-<slug>/, debt in ${c.debt ?? "docs/debt.md"})`
+    if (p.length) problems.push(`${name}: ${p.join("; ")}`)
+    return `${name} (artifacts in ${c.artifacts ?? "docs/work"}/<date>-<slug>/, debt in ${c.debt ?? "docs/debt.md"})`
   })
+  const fix = problems.length ? ` Config problems in ${problems.join(" | ")}. Tell the user in one line; fix sdlc.json only if they ask.` : ""
   // Lane S is spelled out here so a copy or config edit does not load the whole skill.
-  return `This workspace follows the sdlc process (sdlc.json in: ${where.join(", ")}). Lane S (copy, config, styling, a rename: no new logic, not even a short branch) needs no skill: say "Lane S" with the reason, edit, and the hooks check it. Before any other code change, review or plan there, invoke the \`sdlc\` skill (once per session; it stays in context) and state the lane (M or L) with its reason.`
+  return `This workspace follows the sdlc process (sdlc.json in: ${where.join(", ")}). Lane S (copy, config, styling, a rename: no new logic, not even a short branch) needs no skill: say "Lane S" with the reason, edit, and the hooks check it. Before any other code change, review or plan there, invoke the \`sdlc\` skill (once per session; it stays in context) and state the lane (M or L) with its reason.${fix}`
 }
 
 // ---- output: one adapter per host -------------------------------------------------------------

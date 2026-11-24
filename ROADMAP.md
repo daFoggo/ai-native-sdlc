@@ -106,3 +106,8 @@ Must and Should findings were fixed in 0.4.0. Minor ones, kept here:
 - `templates/ci/pr-review.yml` and `templates/maintain/bands.yaml` still hardcode `docs/work`.
 - `start` says "sdlc.json unreadable" also when only `sdlc.local.json` is broken; guard, check and verify still let a
   broken config throw (visible error, but for that repo only checked by hand).
+
+## Deferred from the 0.5.6 review (Minor)
+
+- `configProblems`: an in-repo folder named `..foo` counts as outside the repo; an absolute `debt`/`artifacts` on another
+  Windows drive is not checked (a missed warning only).

@@ -6,7 +6,7 @@ import { basename, join } from "node:path"
 import { after, test } from "node:test"
 import { fileURLToPath } from "node:url"
 
-import { HOSTS, check, findSecret, guard, hostOf, markTouched, normalize, start, verify } from "./sdlc.mjs"
+import { HOSTS, check, configProblems, findSecret, guard, hostOf, markTouched, normalize, start, verify } from "./sdlc.mjs"
 
 const SCRIPT = fileURLToPath(new URL("./sdlc.mjs", import.meta.url))
 
@@ -159,6 +159,39 @@ test("start names where artifacts and debt go, from sdlc.json or the defaults", 
   assert.match(m, /invoke the `sdlc` skill/)
   assert.match(m, /artifacts in plans\//)
   assert.match(m, /sdlc\.json unreadable/)
+})
+
+test("start reports config that can never work (pilot P3, P5); a healthy config adds nothing", () => {
+  const ok = repo({ artifacts: "plans", debt: "TODO.md", skills: [{ glob: "**", skill: "a" }] })
+  assert.doesNotMatch(start({ cwd: ok }), /Config problems/)
+  // P5: debt in a renamed sibling folder; a map folder with no map.json; a key typo the hooks would ignore silently.
+  const bad = repo({ debt: "../gone/docs/debt.md", artifacts: "../nope/work", map: "docs/map", denybash: [], $schema: "x" })
+  const m = start({ cwd: bad })
+  assert.match(m, /Config problems in /)
+  assert.match(m, /debt: folder \.\.\/gone\/docs does not exist/)
+  assert.match(m, /artifacts: folder \.\.\/nope does not exist/)
+  assert.match(m, /map: docs\/map\/map\.json does not exist/)
+  assert.match(m, /unknown key denybash/)
+  assert.doesNotMatch(m, /\$schema/)
+  // P3: a mapped skill a settings layer turns off; a later layer can turn it back on.
+  const home = mkdtempSync(join(BASE, "home-"))
+  mkdirSync(join(home, ".claude"))
+  writeFileSync(join(home, ".claude", "settings.json"), JSON.stringify({ skillOverrides: { "fastapi": "off", "b": "off" } }))
+  const off = repo({ skills: [{ glob: "**", skill: "plug:fastapi" }, { glob: "**", skill: "b" }] })
+  writeFileSync(join(off, ".claude", "settings.local.json"), JSON.stringify({ skillOverrides: { b: "on" } }))
+  assert.deepEqual(configProblems(off, JSON.parse(readFileSync(join(off, ".claude", "sdlc.json"), "utf8")), home), [
+    "skills: fastapi is mapped but turned off in settings (skillOverrides); the guard skips it",
+  ])
+  // The guard does not refuse an edit for a skill that cannot load.
+  writeFileSync(join(off, ".claude", "settings.local.json"), JSON.stringify({ skillOverrides: { fastapi: "off", b: "off" } }))
+  assert.equal(guard({ ...edit(off, "x.py"), session_id: `off-${Date.now()}` }), null)
+  // R1: a malformed `skills` neither crashes start nor the guard; a folder inside the repo is made on first use.
+  for (const skills of [{}, "x", [null], [{ glob: 1 }]]) {
+    const r = repo({ skills, artifacts: "docs/work" })
+    assert.match(start({ cwd: r }), /invoke the `sdlc` skill/)
+    assert.doesNotMatch(start({ cwd: r }), /artifacts:/)
+    assert.equal(guard({ ...edit(r, "x.py"), session_id: `bad-${Date.now()}` }), null)
+  }
 })
 
 test("bash: files a shell command changed get the same check, and fix mode reports changed tests", () => {

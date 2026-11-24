@@ -103,6 +103,9 @@ commands, not the agent's shell. A `protect` entry's optional `via` is a pattern
 write there (the vendored set's update script); a command that rewrites a protected file unchanged is not reported.
 `approve` asks a person through the host's permission prompt; in a session that runs with prompts bypassed
 (`bypassPermissions`) it stays silent, since that user chose not to be asked. `deny`, `protect` and secrets still block.
+At session start the hook reports config that can never work (a `debt` or `artifacts` folder that is gone, a `map`
+without map.json, an unknown key, a mapped skill that `skillOverrides` turns off); a healthy config adds nothing.
+Why the hooks are built this way: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 In a folder that holds several repos, the Stop hook verifies each child repo with its own `sdlc.json` that the
 session changed. Secret
 scanning (keys and tokens written into tracked files) is on unless `"secrets": false`.
