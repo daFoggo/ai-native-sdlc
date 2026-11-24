@@ -164,6 +164,10 @@ test("start names where artifacts and debt go, from sdlc.json or the defaults", 
 test("start reports config that can never work (pilot P3, P5); a healthy config adds nothing", () => {
   const ok = repo({ artifacts: "plans", debt: "TODO.md", skills: [{ glob: "**", skill: "a" }] })
   assert.doesNotMatch(start({ cwd: ok }), /Config problems/)
+  // A list of globs is a valid entry (wattprint-web maps one skill to two apps); 0.5.6 called it malformed.
+  const list = repo({ skills: [{ glob: ["a/**", "b/**"], skill: "c" }] })
+  assert.doesNotMatch(start({ cwd: list }), /Config problems/)
+  assert.match(guard({ ...edit(list, "b/x.ts"), session_id: `list-${Date.now()}` })?.reason ?? "", /`c`/)
   // P5: debt in a renamed sibling folder; a map folder with no map.json; a key typo the hooks would ignore silently.
   const bad = repo({ debt: "../gone/docs/debt.md", artifacts: "../nope/work", map: "docs/map", denybash: [], $schema: "x" })
   const m = start({ cwd: bad })
@@ -186,7 +190,7 @@ test("start reports config that can never work (pilot P3, P5); a healthy config 
   writeFileSync(join(off, ".claude", "settings.local.json"), JSON.stringify({ skillOverrides: { fastapi: "off", b: "off" } }))
   assert.equal(guard({ ...edit(off, "x.py"), session_id: `off-${Date.now()}` }), null)
   // R1: a malformed `skills` neither crashes start nor the guard; a folder inside the repo is made on first use.
-  for (const skills of [{}, "x", [null], [{ glob: 1 }]]) {
+  for (const skills of [{}, "x", [null], [{ glob: 1 }], [{ glob: [], skill: "a" }], [{ glob: ["a", 1], skill: "a" }]]) {
     const r = repo({ skills, artifacts: "docs/work" })
     assert.match(start({ cwd: r }), /invoke the `sdlc` skill/)
     assert.doesNotMatch(start({ cwd: r }), /artifacts:/)

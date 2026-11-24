@@ -230,7 +230,8 @@ export function guard(input) {
  *  this agent has not loaded is refused once per skill, so the refusal is a nudge that can never wedge a session. */
 const bareSkill = (name) => String(name ?? "").split(":").pop() // `plugin:name` and `name` are one skill
 // The one reader of `skills`: a malformed entry is dropped (start reports the shape), never thrown in a hook.
-const skillMap = (c) => (Array.isArray(c.skills) ? c.skills.filter((s) => typeof s?.glob === "string" && typeof s?.skill === "string") : [])
+const isGlob = (g) => typeof g === "string" || (Array.isArray(g) && g.length > 0 && g.every((x) => typeof x === "string"))
+const skillMap = (c) => (Array.isArray(c.skills) ? c.skills.filter((s) => isGlob(s?.glob) && typeof s?.skill === "string") : [])
 
 /** Skills a Claude Code settings layer turns off (`skillOverrides: { name: "off" }`), later layers winning: a
  *  mapping to one can never be satisfied, so the guard skips it and `start` reports it.
@@ -546,7 +547,7 @@ export function configProblems(root, c, home = homedir()) {
   if (typeof c.map === "string" && !existsSync(join(root, c.map, "map.json")))
     out.push(`map: ${posixRelative(root, join(root, c.map, "map.json"))} does not exist (reviews list no flows)`)
   if (c.skills !== undefined && skillMap(c).length !== (Array.isArray(c.skills) ? c.skills.length : -1))
-    out.push("skills: must be a list of { glob, skill } strings; the malformed entries are ignored")
+    out.push("skills: must be a list of { glob: string or list of strings, skill: string }; the malformed entries are ignored")
   const off = skillsOff(root, home)
   for (const n of new Set(skillMap(c).map((s) => bareSkill(s.skill))))
     if (off.has(n)) out.push(`skills: ${n} is mapped but turned off in settings (skillOverrides); the guard skips it`)
